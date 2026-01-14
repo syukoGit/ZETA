@@ -11,7 +11,10 @@ class GetCashBalanceArgs(BaseModel):
 class GetPnlArgs(BaseModel):
     pass
 
-class GetOrdersArgs(BaseModel):
+class GetOpenTradesArgs(BaseModel):
+    pass
+
+class GetTradeHistoryArgs(BaseModel):
     pass
 
 class GetHistoryArgs(BaseModel):

@@ -28,10 +28,15 @@ def get_tools() -> Dict[str, ToolSpec]:
             args_model=GetCashBalanceArgs,
             handler=ib.get_cash_balance,
         ),
-        "get_orders": ToolSpec(
-            description="Return current IB orders.",
-            args_model=GetOrdersArgs,
-            handler=ib.get_orders,
+        "get_open_trades": ToolSpec(
+            description="Return current IB open trades.",
+            args_model=GetOpenTradesArgs,
+            handler=ib.get_open_trades,
+        ),
+        "get_trade_history": ToolSpec(
+            description="Return trade history for this session.",
+            args_model=GetTradeHistoryArgs,
+            handler=ib.get_trade_history,
         ),
         "get_pnl": ToolSpec(
             description="Get the profit and loss (PnL) for the positions.",
