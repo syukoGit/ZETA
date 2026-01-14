@@ -60,6 +60,32 @@ class IBTools:
                 if av.tag == "CashBalance"
             ]
         return {"cash_balances": cash_values}
+    
+    async def get_orders(self, _: Dict[str, Any]) -> Dict[str, Any]:
+        trades = self.ib.openTrades()
+        if not trades:
+            return {"orders": []}
+        
+        outputs = []
+        
+        for trade in trades:
+            order = trade.order
+            status = trade.orderStatus
+            contract = trade.contract
+
+            outputs.append({
+                "symbol": contract.symbol,
+                "orderId": order.orderId,
+                "action": order.action,
+                "totalQuantity": order.totalQuantity,
+                "orderType": order.orderType,
+                "lmtPrice": float(order.lmtPrice) if order.lmtPrice not in (None, 0) else None,
+                "status": status.status,
+                "filled": status.filled,
+                "remaining": status.remaining,
+            })
+
+        return {"orders": outputs}
 
     async def get_pnl(self, _: Dict[str, Any]) -> Dict[str, Any]:
         async with self.ib_sem:

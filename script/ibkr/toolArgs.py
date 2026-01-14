@@ -11,6 +11,9 @@ class GetCashBalanceArgs(BaseModel):
 class GetPnlArgs(BaseModel):
     pass
 
+class GetOrdersArgs(BaseModel):
+    pass
+
 class GetHistoryArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
     duration: str = Field("2 D", description='The amount of time to go back from the request\'s given end date and time', pattern="^([1-9][0-9]* (S|D|W|M|Y))+$")
