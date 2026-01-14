@@ -6,11 +6,16 @@ from ibkr.toolArgs import *
 
 async def init_ib_connection(dry_run: bool = True) -> IB:
     ib = IB()
-    await ib.connectAsync("127.0.0.1", 7497)
+    await ib.connectAsync("127.0.0.1", 7497, clientId=0)
+
+    while not ib.isConnected():
+        await asyncio.sleep(0.1)
 
     ib_sem = asyncio.Semaphore(1)
 
-    IBTools(ib, ib_sem=ib_sem, dry_run=dry_run)
+    _ = IBTools(ib, ib_sem=ib_sem, dry_run=dry_run)
+
+    return ib
 
 class IBTools:
     _instance: Optional["IBTools"] = None
