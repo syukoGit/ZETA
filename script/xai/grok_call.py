@@ -9,72 +9,128 @@ from xai_sdk.chat import user, system, tool_result
 from xai_sdk.tools import get_tool_call_type
 from xai_sdk.proto.v6.chat_pb2 import ToolCall
 
+from db.repository import init_db, get_session, ConversationRepository
+
 load_dotenv()
+
+init_db()
 
 async def run_call_grok(summary: str | None) -> str:
     client = Client(api_key=os.getenv('XAI_API_KEY'))
 
-    chat = client.chat.create(
-        model="grok-4-1-fast-reasoning",
-        tools=get_grok_tool(),
-        tool_choice="auto",
-        store_messages=True,
-    )
+    with get_session() as session:
+        repo = ConversationRepository(session)
+        conversation = repo.create_conversation(
+            provider="xai",
+            model="grok-4-1-fast-reasoning",
+        )
+        conversation_id = conversation.conversation_id
 
-    # Initialize the conversation with the start prompt
-    chat.append(system(DEFAULT_START_PROMPT))
+        chat = client.chat.create(
+            model="grok-4-1-fast-reasoning",
+            tools=get_grok_tool(),
+            tool_choice="auto",
+            store_messages=True,
+        )
 
-    chat.append(user("SUMMARY_PREV: " + summary if summary else "No summary provided."))
-    
-    # Provides the current trading context to Grok
-    ib_tools = IBTools.get_instance()
-    positions = await ib_tools.get_positions({})
-    cash_balance = await ib_tools.get_cash_balance({})
-    orders = await ib_tools.get_orders({})
+        # Initialize the conversation with the start prompt
+        chat.append(system(DEFAULT_START_PROMPT))
+        repo.add_system_message(conversation_id, DEFAULT_START_PROMPT)
 
-    snapshot_ib = {
-        "positions": positions["positions"],
-        "cash_balances": cash_balance["cash_balances"],
-        "orders": orders["orders"],
-    }
+        summary_message = "SUMMARY_PREV: " + json.dumps(summary) if summary else "No summary provided."
+        chat.append(user(summary_message))
+        repo.add_user_message(conversation_id, summary_message)
+        
+        # Provides the current trading context to Grok
+        ib_tools = IBTools.get_instance()
+        positions = await ib_tools.get_positions({})
+        cash_balance = await ib_tools.get_cash_balance({})
+        open_trades = await ib_tools.get_open_trades({})
 
-    chat.append(user("SNAPSHOT_IB: " + json.dumps(snapshot_ib)))
+        snapshot_ib = {
+            "positions": positions["positions"],
+            "cash_balances": cash_balance["cash_balances"],
+            "open_trades": open_trades["open_trades"],
+        }
 
-    try:
-        max_loops = 0
-        while max_loops < 10:
-            client_side_calls: list[ToolCall] = []
+        snapshot_message = "SNAPSHOT_IB: " + json.dumps(snapshot_ib)
+        chat.append(user(snapshot_message))
+        repo.add_user_message(conversation_id, snapshot_message)
 
-            for response, chunk in chat.stream():
-                for tc in chunk.tool_calls:
-                    if get_tool_call_type(tc) == "client_side_tool":
-                        client_side_calls.append(tc)
-                    else:
-                        print(f"\nServer side tool call: {tc.function.name} (arguments: {tc.function.arguments})")
+        try:
+            max_loops = 0
+            while max_loops < 10:
+                client_side_calls: list[ToolCall] = []
 
-            if not client_side_calls:
-                break
+                for response, chunk in chat.stream():
+                    for tc in chunk.tool_calls:
+                        if get_tool_call_type(tc) == "client_side_tool":
+                            client_side_calls.append(tc)
+                        else:
+                            print(f"\nServer side tool call: {tc.function.name} (arguments: {tc.function.arguments})")
 
-            chat = client.chat.create(
-                model="grok-4-1-fast-reasoning",
-                tools=get_grok_tool(),
-                store_messages=True,
-                previous_response_id=response.id,
+                # Sauvegarde la réponse de l'assistant
+                if response.content:
+                    repo.add_assistant_message(
+                        conversation_id,
+                        response.content,
+                        payload={"response_id": response.id},
+                    )
+
+                if not client_side_calls:
+                    break
+
+                chat = client.chat.create(
+                    model="grok-4-1-fast-reasoning",
+                    tools=get_grok_tool(),
+                    store_messages=True,
+                    previous_response_id=response.id,
+                )
+
+                for tc in client_side_calls:
+                    print(f"\nClient side tool call: {tc.function.name} (arguments: {tc.function.arguments})")
+                    
+                    # Sauvegarde l'appel de tool
+                    args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                    tool_item = repo.add_tool_call(
+                        conversation_id,
+                        tc.function.name,
+                        args,
+                        tool_call_id=tc.id if hasattr(tc, 'id') else None,
+                    )
+                    
+                    result = await run_client_side_tool(tc)
+                    
+                    # Sauvegarde le résultat du tool
+                    is_error = result.startswith("Error:")
+                    repo.add_tool_result(
+                        conversation_id,
+                        tc.function.name,
+                        result,
+                        parent_item_id=tool_item.item_id,
+                        error=result if is_error else None,
+                    )
+
+                    chat.append(tool_result(result))
+                
+                max_loops += 1
+        except Exception as e:
+            print(f"Error during Grok interaction: {e}")
+            # Sauvegarde l'erreur dans la conversation
+            repo.add_item(
+                conversation_id,
+                kind="error",
+                content=str(e),
+                status="failed",
+                error=str(e),
             )
-
-            for tc in client_side_calls:
-                print(f"\nClient side tool call: {tc.function.name} (arguments: {tc.function.arguments})")
-                result = await run_client_side_tool(tc)
-
-                chat.append(tool_result(result))
-            
-            max_loops += 1
-    except Exception as e:
-        print(f"Error during Grok interaction: {e}")
-    
-    final_output = response.content if response.content else str(response.proto.outputs)
-    
-    return final_output
+        
+        final_output = response.content if response.content else str(response.proto.outputs)
+        
+        # Termine la conversation
+        repo.end_conversation(conversation_id)
+        
+        return final_output
 
 async def run_client_side_tool(tool_call: ToolCall) -> str:
     try:

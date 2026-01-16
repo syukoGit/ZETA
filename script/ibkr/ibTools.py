@@ -84,12 +84,11 @@ class IBTools:
     
     async def get_open_trades(self, _: Dict[str, Any]) -> Dict[str, Any]:
         trades = self.ib.openTrades()
-        return {"trades": self._format_trades(trades) if trades else []}
+        return {"open_trades": self._format_trades(trades) if trades else []}
     
     async def get_trade_history(self, _: Dict[str, Any]) -> Dict[str, Any]:
         trades = self.ib.trades()
-        return {"trades": self._format_trades(trades) if trades else []}
-
+        return {"trade_history": self._format_trades(trades) if trades else []}
     async def get_pnl(self, _: Dict[str, Any]) -> Dict[str, Any]:
         async with self.ib_sem:
             portfolio = self.ib.portfolio()
