@@ -32,6 +32,10 @@ class PlaceOrderArgs(BaseModel):
     order_type: str = Field(..., pattern="^(MKT|LMT)$")
     limit_price: Optional[float] = None
 
-    @staticmethod
-    def validate_limit(values):
-        return values
+class GetQuoteArgs(BaseModel):
+    symbol: str = Field(..., min_length=1, description="Ticker")
+    currency: str = Field("USD", min_length=1, description="Currency code")
+    exchange: str = Field("SMART", min_length=1, description="SMART recommended")
+    primary_exchange: Optional[str] = Field("NASDAQ", description="Optional primary exchange")
+    timeout_s: float = Field(6.0, gt=0, description="Timeout for quote fetch")
+    regulatory_snapshot: bool = Field(False)
