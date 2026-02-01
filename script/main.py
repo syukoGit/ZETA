@@ -1,37 +1,11 @@
 import asyncio
-from datetime import datetime, time as dt_time, timedelta
+from datetime import datetime
 import json
 import nest_asyncio
-import sys
 from ibkr.ibTools import init_ib_connection
 from xai.grok_call import run_call_grok
+from utils.timing import get_wait_time, countdown_display, DEFAULT_WAIT_TIME
 
-def get_wait_time(timeBeforeNextRun):
-    now = datetime.now()
-    current_time = now.time()
-    
-    evening_cutoff = dt_time(22, 30)  # 22h30
-    morning_start = dt_time(15, 0)     # 15h00
-    
-    if current_time >= evening_cutoff or current_time < morning_start:
-        next_call = now + timedelta(seconds=3600)
-        
-        if current_time < morning_start:
-            target_15h = datetime.combine(now.date(), morning_start)
-            if next_call > target_15h:
-                wait_seconds = (target_15h - now).total_seconds()
-                return max(60, int(wait_seconds))
-        
-        return 3600
-    else:
-        next_call = now + timedelta(seconds=timeBeforeNextRun)
-        target_22h30 = datetime.combine(now.date(), evening_cutoff)
-        
-        if next_call.time() > evening_cutoff:
-            wait_seconds = (target_22h30 - now).total_seconds()
-            return max(60, int(wait_seconds))
-        
-        return timeBeforeNextRun
 
 async def main():
     ib = None
@@ -49,30 +23,15 @@ async def main():
                 grok_reporting["as_of"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             except Exception as e:
                 print(f"Error during Grok call: {e}")
-                print(e.__traceback__)
-                grok_reporting = {"timeBeforeNextRun": 600}  # Default wait time on error
+                grok_reporting = {"timeBeforeNextRun": DEFAULT_WAIT_TIME}
 
             print(f"\n\nGrok Reporting ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")}):")
             print(grok_reporting)
 
-            base_wait_time = grok_reporting.get("timeBeforeNextRun", 600)
-            timeBeforeNextRun = get_wait_time(base_wait_time)
+            base_wait_time = grok_reporting.get("timeBeforeNextRun", DEFAULT_WAIT_TIME)
+            time_before_next_run = get_wait_time(base_wait_time)
 
-            current_hour = datetime.now().strftime("%H:%M")
-            
-            remaining = timeBeforeNextRun
-            while remaining > 0:
-                mins, secs = divmod(remaining, 60)
-                status_msg = f"\r⏳ {current_hour} - Prochain appel dans {int(mins):02d}:{int(secs):02d}  "
-                sys.stdout.write(status_msg)
-                sys.stdout.flush()
-                
-                # Dormir 1 seconde à la fois pour pouvoir mettre à jour l'affichage
-                await asyncio.sleep(1)
-                remaining -= 1
-            
-            # Nouvelle ligne avant le prochain appel
-            print()
+            await countdown_display(time_before_next_run)
     except KeyboardInterrupt:
         print("\n🛑 Stopped by user")
     except Exception as e:
