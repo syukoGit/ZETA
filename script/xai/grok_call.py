@@ -2,9 +2,11 @@ import json
 import os
 from dotenv import load_dotenv
 from xai_sdk import Client
-from ibkr.ibTools import IBTools
+from ibkr.tools.getTools import get_tools
+from ibkr.tools.portfolioTools import get_cash_balance, get_positions
+from ibkr.tools.tradeTools import get_open_trades
 from xai.start_prompt import DEFAULT_START_PROMPT
-from xai.toolsModels import get_grok_tool, get_tools
+from xai.toolsModels import get_grok_tool
 from xai_sdk.chat import user, system, tool_result
 from xai_sdk.tools import get_tool_call_type
 from xai_sdk.proto.v6.chat_pb2 import ToolCall
@@ -42,10 +44,9 @@ async def run_call_grok(summary: str | None) -> str:
         repo.add_user_message(conversation_id, summary_message)
         
         # Provides the current trading context to Grok
-        ib_tools = IBTools.get_instance()
-        positions = await ib_tools.get_positions({})
-        cash_balance = await ib_tools.get_cash_balance({})
-        open_trades = await ib_tools.get_open_trades({})
+        positions = await get_positions({})
+        cash_balance = await get_cash_balance({})
+        open_trades = await get_open_trades({})
 
         snapshot_ib = {
             "positions": positions["positions"],

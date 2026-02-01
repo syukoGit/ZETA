@@ -1,7 +1,6 @@
 from xai_sdk.chat import tool
 from xai_sdk.tools import web_search, x_search
-
-from ibkr.toolRegistry import get_tools
+from ibkr.tools.getTools import get_tools
 
 
 def get_grok_tool():
