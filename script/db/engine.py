@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
-DB_URL = "sqlite+pysqlite:///omega.sqlite"
+DB_URL = "sqlite+pysqlite:///zeta.sqlite"
 
 engine = create_engine(
     DB_URL,
