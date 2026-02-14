@@ -1,12 +1,17 @@
-from db.engine import engine, SessionLocal
-from db.models import Base, Conversation, Item
-from db.repository import ConversationRepository
+"""
+Database module for ZETA cognitive memory system.
+"""
+
+from .database import DatabaseManager, get_db
+from .models import Base, Run, Message, ToolCall, MemoryEntry, MemoryAccessLog
 
 __all__ = [
-    "engine",
-    "SessionLocal",
+    "DatabaseManager",
+    "get_db",
     "Base",
-    "Conversation",
-    "Item",
-    "ConversationRepository",
+    "Run",
+    "Message",
+    "ToolCall",
+    "MemoryEntry",
+    "MemoryAccessLog",
 ]
