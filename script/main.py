@@ -1,43 +1,69 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 import json
+from dotenv import load_dotenv
 import nest_asyncio
 from ibkr.ibTools import init_ib_connection
-from xai.grok_call import run_call_grok
+from db.database import init_db
+from db.db_tools import DBTools
+from config import get
+from logger import setup_logging, get_logger
+from llm.llm_call import run_llm_call
 from utils.timing import get_wait_time, countdown_display, DEFAULT_WAIT_TIME
+
+logger = get_logger(__name__)
 
 
 async def main():
     ib = None
-    grok_reporting = None
+    db = None
+    previous_reporting = None
+
+    load_dotenv()
+    setup_logging()
 
     try:
-        ib = await init_ib_connection(dry_run=False)
+        logger.info("Initializing database...")
+        db = init_db()
+        db.create_tables()
+    except Exception as e:
+        logger.error("Error initializing database: %s", e)
+        return
+    
+    dbTools = DBTools()
+    logger.info("Database initialized and session started.")
+
+    dry_run = get("dry_run", True)
+    if dry_run:
+        logger.info("Running in dry-run mode. No real trades will be executed.")
+
+    try:
+        ib = await init_ib_connection(dry_run)
 
         while True:
             try:
-                print(f"\n🔄 Appel de Grok... ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")}) :")
+                logger.info("LLM call... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
 
-                grok_reporting = await run_call_grok(grok_reporting)
-                grok_reporting = json.loads(grok_reporting)
-                grok_reporting["as_of"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                previous_reporting = await run_llm_call(dbTools, previous_reporting)
+                previous_reporting = json.loads(previous_reporting)
+                previous_reporting["as_of"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             except Exception as e:
-                print(f"Error during Grok call: {e}")
-                grok_reporting = {"timeBeforeNextRun": DEFAULT_WAIT_TIME}
+                logger.error("Error during LLM call: %s", e)
+                previous_reporting = {"timeBeforeNextRun": DEFAULT_WAIT_TIME}
+            
+            logger.info("Reporting (%s):", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+            logger.debug("Reporting data: %s", previous_reporting)
 
-            print(f"\n\nGrok Reporting ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")}):")
-            print(grok_reporting)
-
-            base_wait_time = grok_reporting.get("timeBeforeNextRun", DEFAULT_WAIT_TIME)
+            base_wait_time = previous_reporting.get("timeBeforeNextRun", DEFAULT_WAIT_TIME)
             time_before_next_run = get_wait_time(base_wait_time)
 
             await countdown_display(time_before_next_run)
     except KeyboardInterrupt:
-        print("\n🛑 Stopped by user")
+        logger.info("Stopped by user")
     except Exception as e:
-        print(f"Error in main: {e}")
+        logger.error("Error in main: %s", e, exc_info=True)
     finally:
-        print("🔌 Disconnecting IB...")
+        logger.info("Disconnecting IB...")
         if ib and ib.isConnected():
             ib.disconnect()
 
