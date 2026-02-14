@@ -1,9 +1,11 @@
 {
+    "debugPrint": true,
     "dry_run": false,
-    "active_range": {
-        "start": "15:00",
-        "end": "22:30"
-    },
     "min_wait_seconds": 60,
-    "default_wait_seconds": 3600
+    "default_wait_seconds": 900,
+    "llm": {
+        "provider": "grok",
+        "model": "grok-4-fast-reasoning"
+    },
+    "embedding_model": "sentence-transformers/nli-bert-large"
 }
