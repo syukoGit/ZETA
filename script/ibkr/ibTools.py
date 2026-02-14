@@ -1,16 +1,19 @@
 import asyncio
 from typing import Optional
 from ib_async import IB
+from logger import get_logger
 
-from ibkr.toolArgs import *
+logger = get_logger(__name__)
 
 async def init_ib_connection(dry_run: bool = True) -> IB:
     ib = IB()
+    logger.info("Connecting to IB TWS (127.0.0.1:7497)...")
     await ib.connectAsync("127.0.0.1", 7497, clientId=0)
 
     while not ib.isConnected():
         await asyncio.sleep(0.1)
 
+    logger.info("IB TWS connected (dry_run=%s)", dry_run)
     ib_sem = asyncio.Semaphore(1)
 
     _ = IBTools(ib, ib_sem=ib_sem, dry_run=dry_run)
