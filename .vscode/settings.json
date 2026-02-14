@@ -2,5 +2,8 @@
   "python.analysis.typeCheckingMode": "off",
   "[python]": {
     "editor.tabSize": 4
-  }
+  },
+  "python.analysis.extraPaths": ["${workspaceFolder}/script"],
+  "editor.fontSize": 14,
+  "postman.settings.dotenv-detection-notification-visibility": false
 }
