@@ -1,2 +1,0 @@
-DEFAULT_START_PROMPT = """
-"""
