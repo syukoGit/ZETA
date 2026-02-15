@@ -1,86 +1,86 @@
-"""
-Timing management module for the main loop.
-Handles trading hours and wait time calculations.
-"""
-
 import asyncio
 import sys
-from datetime import datetime, time as dt_time, timedelta, timezone
+from datetime import datetime, timezone
 
 from logger import get_logger
+from utils.market_status import parse_market_snapshot
 
 logger = get_logger(__name__)
 
-
-# Trading hours
-EVENING_CUTOFF = dt_time(21, 30)
-MORNING_START = dt_time(13, 0)
 
 # Default wait times (in seconds)
 DEFAULT_WAIT_TIME = 600
 OFF_HOURS_WAIT_TIME = 3600
 
+# Minimum wait time (in seconds)
+MIN_WAIT_TIME = 60
 
-def is_trading_hours(current_time: dt_time = None) -> bool:
+
+def is_trading_hours(now: datetime = None) -> bool:
     """
-    Check whether we are within trading hours (13:00 - 21:30).
-    
+    Check whether any monitored exchange is currently open.
+
     Args:
-        current_time: The time to check. If None, uses the current time.
-    
+        now: The datetime to check (timezone-aware, UTC).
+             If None, uses the current UTC time.
+
     Returns:
-        True if within trading hours, False otherwise.
+        True if at least one exchange is open, False otherwise.
     """
-    if current_time is None:
-        current_time = datetime.now(timezone.utc).time()
-    
-    return MORNING_START <= current_time < EVENING_CUTOFF
+    return parse_market_snapshot(now)["any_open"]
 
 
 def get_wait_time(time_before_next_run: int) -> int:
     """
-    Calculate the wait time before the next call, taking trading hours
-    into account.
-    
-    - Between 22:30 and 15:00: wait 1 hour (or until 15:00)
-    - Between 15:00 and 22:30: use the requested time (or until 22:30)
-    
+    Calculate the wait time before the next iteration, taking real
+    exchange schedules into account.
+
+    - If markets are closed: wait until the next exchange opens
+      (capped at OFF_HOURS_WAIT_TIME).
+    - If markets are open: use the requested time, but never schedule
+      the next call after all exchanges have closed.
+
     Args:
         time_before_next_run: Desired wait time in seconds.
-    
+
     Returns:
         Adjusted wait time in seconds.
     """
     now = datetime.now(timezone.utc)
-    current_time = now.time()
-    
-    if not is_trading_hours(current_time):
-        # Outside trading hours
-        logger.debug("Outside trading hours (%s). Wait: %ds", current_time.strftime("%H:%M"), OFF_HOURS_WAIT_TIME)
-        next_call = now + timedelta(seconds=OFF_HOURS_WAIT_TIME)
-        
-        if current_time < MORNING_START:
-            # Before 15:00 - check if we can wait until 15:00
-            target_15h = datetime.combine(now.date(), MORNING_START)
-            if next_call > target_15h:
-                wait_seconds = (target_15h - now).total_seconds()
-                logger.debug("Adjusted to %ds to resume at 15:00", wait_seconds)
-                return max(60, int(wait_seconds))
-        
+    snapshot = parse_market_snapshot(now)
+
+    if not snapshot["any_open"]:
+        # --- Markets are closed ---
+        next_open = snapshot["earliest_next_open"]
+        if next_open is not None:
+            seconds_until_open = (next_open - now).total_seconds()
+            wait = min(int(seconds_until_open), OFF_HOURS_WAIT_TIME)
+            logger.debug(
+                "Markets closed (%s). Next open: %s. Wait: %ds",
+                now.strftime("%H:%M"),
+                next_open.strftime("%Y-%m-%d %H:%M"),
+                wait,
+            )
+            return max(MIN_WAIT_TIME, wait)
+
+        logger.debug("Markets closed, no next open found. Wait: %ds", OFF_HOURS_WAIT_TIME)
         return OFF_HOURS_WAIT_TIME
-    else:
-        # During trading hours
-        logger.debug("Trading hours active. Requested wait: %ds", time_before_next_run)
-        next_call = now + timedelta(seconds=time_before_next_run)
-        target_22h30 = datetime.combine(now.date(), EVENING_CUTOFF)
-        
-        if next_call.time() > EVENING_CUTOFF:
-            # The next call would exceed 22:30
-            wait_seconds = (target_22h30 - now).total_seconds()
-            logger.debug("Adjusted to %ds to not exceed 22:30", wait_seconds)
-            return max(60, int(wait_seconds))
-        
-        return time_before_next_run
+
+    # --- Markets are open ---
+    logger.debug("Markets open. Requested wait: %ds", time_before_next_run)
+
+    latest_close = snapshot["latest_close"]
+    if latest_close is not None:
+        seconds_until_close = (latest_close - now).total_seconds()
+        if time_before_next_run > seconds_until_close:
+            wait = int(seconds_until_close)
+            logger.debug(
+                "Adjusted to %ds to not exceed market close at %s",
+                wait, latest_close.strftime("%H:%M"),
+            )
+            return max(MIN_WAIT_TIME, wait)
+
+    return max(MIN_WAIT_TIME, time_before_next_run)
 
 
 async def countdown_display(wait_seconds: int) -> None:
