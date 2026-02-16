@@ -9,7 +9,7 @@ from db.db_tools import DBTools
 from config import get
 from logger import setup_logging, get_logger
 from llm.llm_call import run_llm_call
-from utils.timing import get_wait_time, countdown_display, DEFAULT_WAIT_TIME
+from utils.timing import get_wait_time, countdown_display
 
 logger = get_logger(__name__)
 
@@ -49,12 +49,12 @@ async def main():
                 previous_reporting["as_of"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             except Exception as e:
                 logger.error("Error during LLM call: %s", e)
-                previous_reporting = {"timeBeforeNextRun": DEFAULT_WAIT_TIME}
+                previous_reporting = {"timeBeforeNextRun": get("default_wait_seconds", 600)}
             
             logger.info("Reporting (%s):", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
             logger.debug("Reporting data: %s", previous_reporting)
 
-            base_wait_time = previous_reporting.get("timeBeforeNextRun", DEFAULT_WAIT_TIME)
+            base_wait_time = previous_reporting.get("timeBeforeNextRun", get("default_wait_seconds", 600))
             time_before_next_run = get_wait_time(base_wait_time)
 
             await countdown_display(time_before_next_run)

@@ -2,18 +2,18 @@ import asyncio
 import sys
 from datetime import datetime, timezone
 
+from config import get
 from logger import get_logger
 from utils.market_status import parse_market_snapshot
 
 logger = get_logger(__name__)
 
 
-# Default wait times (in seconds)
-DEFAULT_WAIT_TIME = 600
-OFF_HOURS_WAIT_TIME = 3600
+def _off_hours_wait() -> int:
+    return get("off_hours_wait_seconds", 3600)
 
-# Minimum wait time (in seconds)
-MIN_WAIT_TIME = 60
+def _min_wait() -> int:
+    return get("min_wait_seconds", 60)
 
 
 def is_trading_hours(now: datetime = None) -> bool:
@@ -36,7 +36,7 @@ def get_wait_time(time_before_next_run: int) -> int:
     exchange schedules into account.
 
     - If markets are closed: wait until the next exchange opens
-      (capped at OFF_HOURS_WAIT_TIME).
+      (capped at off_hours_wait_seconds).
     - If markets are open: use the requested time, but never schedule
       the next call after all exchanges have closed.
 
@@ -54,17 +54,17 @@ def get_wait_time(time_before_next_run: int) -> int:
         next_open = snapshot["earliest_next_open"]
         if next_open is not None:
             seconds_until_open = (next_open - now).total_seconds()
-            wait = min(int(seconds_until_open), OFF_HOURS_WAIT_TIME)
+            wait = min(int(seconds_until_open), _off_hours_wait())
             logger.debug(
                 "Markets closed (%s). Next open: %s. Wait: %ds",
                 now.strftime("%H:%M"),
                 next_open.strftime("%Y-%m-%d %H:%M"),
                 wait,
             )
-            return max(MIN_WAIT_TIME, wait)
+            return max(_min_wait(), wait)
 
-        logger.debug("Markets closed, no next open found. Wait: %ds", OFF_HOURS_WAIT_TIME)
-        return OFF_HOURS_WAIT_TIME
+        logger.debug("Markets closed, no next open found. Wait: %ds", _off_hours_wait())
+        return _off_hours_wait()
 
     # --- Markets are open ---
     logger.debug("Markets open. Requested wait: %ds", time_before_next_run)
@@ -78,9 +78,9 @@ def get_wait_time(time_before_next_run: int) -> int:
                 "Adjusted to %ds to not exceed market close at %s",
                 wait, latest_close.strftime("%H:%M"),
             )
-            return max(MIN_WAIT_TIME, wait)
+            return max(_min_wait(), wait)
 
-    return max(MIN_WAIT_TIME, time_before_next_run)
+    return max(_min_wait(), time_before_next_run)
 
 
 async def countdown_display(wait_seconds: int) -> None:

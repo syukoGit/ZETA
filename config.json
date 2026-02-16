@@ -2,7 +2,8 @@
     "debugPrint": true,
     "dry_run": false,
     "min_wait_seconds": 60,
-    "default_wait_seconds": 900,
+    "default_wait_seconds": 600,
+    "off_hours_wait_seconds": 3600,
     "llm": {
         "provider": "grok",
         "model": "grok-4-fast-reasoning"
