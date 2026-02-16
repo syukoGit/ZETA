@@ -1,5 +1,6 @@
 import json
 from db.db_tools import DBTools
+from llm.tools.utils.get_date_hour_utc_and_markets import get_date_hour_utc_and_markets
 from logger import get_logger
 from llm.llm_provider import LLMFactory
 from llm.start_prompt import DEFAULT_START_PROMPT
@@ -30,11 +31,13 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, max_loo
         positions = await get_positions({})
         cash_balance = await get_cash_balance({})
         open_trades = await get_open_trades({})
+        market_status = await get_date_hour_utc_and_markets({})
 
         snapshot_ib = {
             "positions": positions["positions"],
             "cash_balances": cash_balance["cash_balances"],
             "open_trades": open_trades["open_trades"],
+            "market_status": market_status,
         }
 
         snapshot_message = "SNAPSHOT_IB: " + json.dumps(snapshot_ib)
