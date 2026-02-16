@@ -203,10 +203,16 @@ ZETA automatically adapts its cadence based on context:
 
 ### Environment Variables
 
+All environment variables are defined in a `.env` file at the project root (loaded automatically by Docker Compose and the application). A `.env.example` template is provided.
+
 | Variable | Description |
 | --- | --- |
 | `LLM_API_KEY` | LLM provider API key (xAI/Grok) |
-| `DATABASE_URL` | PostgreSQL connection URL (e.g., `postgresql://zeta:zeta_password@localhost:5432/zeta`) |
+| `DATABASE_URL` | PostgreSQL connection URL (e.g., `postgresql://user:password@localhost:5432/db_name`) |
+| `POSTGRES_DB` | PostgreSQL database name (used by Docker Compose) |
+| `POSTGRES_USER` | PostgreSQL user (used by Docker Compose) |
+| `POSTGRES_PASSWORD` | PostgreSQL password (used by Docker Compose) |
+| `POSTGRES_PORT` | PostgreSQL exposed port (used by Docker Compose, default: `5432`) |
 
 ---
 
@@ -221,27 +227,39 @@ ZETA automatically adapts its cadence based on context:
 
 ## Installation & Getting Started
 
-### 1. Start the database
+### 1. Configure environment variables
+
+Copy the template and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+# PostgreSQL (used by Docker Compose)
+POSTGRES_DB=db_name
+POSTGRES_USER=user
+POSTGRES_PASSWORD=change_me
+POSTGRES_PORT=5432
+
+# Application
+LLM_API_KEY=your_xai_api_key
+DATABASE_URL=postgresql://user:change_me@localhost:5432/db_name
+```
+
+> **Important:** The `DATABASE_URL` credentials must match the `POSTGRES_*` values.
+
+### 2. Start the database
 
 ```bash
 docker-compose up -d
 ```
 
-This launches a PostgreSQL 16 container with the pgvector extension, configured with:
+This launches a PostgreSQL 16 container with the pgvector extension. The `vector` extension is automatically enabled via the init script (`script/db/init/init.sql`).
 
-- Database: `database_name`
-- User: `username`
-- Password: `password`
-- Port: `5432`
-
-### 2. Configure environment variables
-
-Create a `.env` file at the project root:
-
-```env
-LLM_API_KEY=your_xai_api_key
-DATABASE_URL=postgresql://username:password@localhost:5432/database_name
-```
+> **Note:** The init script only runs on the first startup (when the volume is empty). If you need to reinitialize, run `docker compose down -v` then `docker compose up -d`.
 
 ### 3. Install Python dependencies
 

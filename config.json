@@ -6,7 +6,7 @@
     "off_hours_wait_seconds": 3600,
     "llm": {
         "provider": "grok",
-        "model": "grok-4-fast-reasoning"
+        "model": "grok-4-1-fast-reasoning"
     },
     "embedding_model": "sentence-transformers/nli-bert-large"
 }
