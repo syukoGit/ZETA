@@ -30,7 +30,19 @@ async def main():
         logger.error("Error initializing database: %s", e)
         return
     
-    dbTools = DBTools()
+    embedding_model_name = get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
+    logger.info(f"Loading embedding model: {embedding_model_name}...")
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        embed_model = SentenceTransformer(embedding_model_name)
+        embedding_fn = lambda text: embed_model.encode(text).tolist()
+        logger.info(f"Embedding model loaded (dim={embed_model.get_sentence_embedding_dimension()}).")
+    except Exception as exc:
+        logger.error(f"Failed to load embedding model: {exc}")
+        return
+    
+    dbTools = DBTools(embedding_function=embedding_fn)
     logger.info("Database initialized and session started.")
 
     dry_run = get("dry_run", True)
