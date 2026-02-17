@@ -8,5 +8,10 @@
         "provider": "grok",
         "model": "grok-4-1-fast-reasoning"
     },
-    "embedding_model": "sentence-transformers/nli-bert-large"
+    "embedding_model": "sentence-transformers/nli-bert-large",
+    "ibkr": {
+        "host": "127.0.0.1",
+        "port": 7497,
+        "clientId": 0
+    }
 }
