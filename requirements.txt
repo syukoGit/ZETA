@@ -1,0 +1,10 @@
+colorlog
+exchange-calendars
+ib_async
+nest-asyncio
+pandas
+pgvector
+pydantic
+python-dotenv
+sqlalchemy
+xai-sdk
