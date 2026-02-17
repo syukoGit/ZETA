@@ -97,7 +97,7 @@ class MemoryEntry(Base):
     meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
-    embedding = mapped_column(Vector(1536), nullable=True)
+    embedding = mapped_column(Vector(1024), nullable=True)
 
     # Relationships
     access_logs: Mapped[List["MemoryAccessLog"]] = relationship("MemoryAccessLog", back_populates="memory", cascade="all, delete-orphan")
