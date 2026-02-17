@@ -4,7 +4,9 @@ ib_async
 nest-asyncio
 pandas
 pgvector
+psycopg2-binary
 pydantic
 python-dotenv
+sentence-transformers
 sqlalchemy
 xai-sdk

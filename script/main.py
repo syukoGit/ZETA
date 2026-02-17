@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 from dotenv import load_dotenv
 import nest_asyncio
+from sentence_transformers import SentenceTransformer
 from ibkr.ibTools import init_ib_connection
 from db.database import init_db
 from db.db_tools import DBTools
@@ -33,8 +34,6 @@ async def main():
     embedding_model_name = get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
     logger.info(f"Loading embedding model: {embedding_model_name}...")
     try:
-        from sentence_transformers import SentenceTransformer
-
         embed_model = SentenceTransformer(embedding_model_name)
         embedding_fn = lambda text: embed_model.encode(text).tolist()
         logger.info(f"Embedding model loaded (dim={embed_model.get_sentence_embedding_dimension()}).")
