@@ -29,7 +29,6 @@ async def memory_update(args: Dict[str, Any]) -> Dict[str, Any]:
             meta=a.meta,
             status=None,
             tags=a.tags,
-            message_id=args.get("message_id")
         )
         
         return {

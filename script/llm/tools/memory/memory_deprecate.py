@@ -20,8 +20,8 @@ async def memory_deprecate(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         memory_id = dbTools.memory_deprecate(
             a.memory_id,
+            args.get("message_id"),
             a.reason,
-            message_id=args.get("message_id")
         )
         
         return {
@@ -30,6 +30,6 @@ async def memory_deprecate(args: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         return {
-            "memory_id": str(memory_id),
+            "memory_id": str(a.memory_id),
             "error": str(e)
         }
