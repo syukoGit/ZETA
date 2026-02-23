@@ -41,6 +41,8 @@ def setup_logging() -> None:
     root.addHandler(handler)
 
     logging.getLogger("ib_async").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:
