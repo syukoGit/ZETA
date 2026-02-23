@@ -104,7 +104,7 @@ async def cmd_search(tools: dict) -> None:
     types_str = input(f"  {CYAN}Filter by memory types (comma-separated, leave empty for all): {RESET}").strip()
     memory_types = [t.strip() for t in types_str.split(",") if t.strip()] or None
 
-    args = {"query": query, "limit": limit, "message_id": _message_id}
+    args = {"query": query, "limit": limit, "message_id": _message_id, "min_similarity": 0}
     if tags:
         args["tags"] = tags
     if memory_types:
@@ -269,26 +269,11 @@ async def _main() -> None:
     from db.database import init_db
     from db.db_tools import DBTools
 
-    # ── Load embedding model ──
-    from config import get as config_get
-
-    embedding_model_name = config_get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
-    _info(f"Loading embedding model: {embedding_model_name}...")
-    try:
-        from sentence_transformers import SentenceTransformer
-
-        embed_model = SentenceTransformer(embedding_model_name)
-        embedding_fn = lambda text: embed_model.encode(text).tolist()
-        _ok(f"Embedding model loaded (dim={embed_model.get_sentence_embedding_dimension()}).")
-    except Exception as exc:
-        _fail(f"Failed to load embedding model: {exc}")
-        return
-
     _info("Initializing database...")
     try:
         db = init_db()
         db.create_tables()
-        dbTools = DBTools(embedding_function=embedding_fn)
+        dbTools = DBTools()
         _ok("Database ready.")
     except Exception as exc:
         _fail(f"Database init failed: {exc}")

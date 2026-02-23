@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple, Union
 from uuid import UUID
 
+from db.embedding_model import EmbeddingModel
+
 from .database import get_db
 from .models import MemoryAccessLog, MemoryEntry
 from .repositories import (
@@ -19,25 +21,18 @@ class DBTools:
     All memory access is logged and traced to the originating message.
     """
     _instance: Optional["DBTools"] = None
-    embedding_function: Any
 
-    def __new__(cls, embedding_function=None):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(DBTools, cls).__new__(cls)
-            cls._instance.embedding_function = embedding_function
+            EmbeddingModel.get_instance()
         return cls._instance
 
     @classmethod
     def get_instance(cls) -> "DBTools":
         if cls._instance is None:
-            raise RuntimeError("DBTools has not been initialized. Call DBTools(embedding_function=...) first.")
+            cls._instance = DBTools()
         return cls._instance
-
-    def _get_embedding(self, text: str) -> Optional[List[float]]:
-        """Generate an embedding for the given text."""
-        if self.embedding_function:
-            return self.embedding_function(text)
-        return None
 
     # ========== Run Management Tools ==========
 
@@ -238,7 +233,7 @@ class DBTools:
         if not query or not query.strip():
             return []
 
-        query_embedding = self._get_embedding(query)
+        query_embedding = EmbeddingModel.embed_query(query)
         if query_embedding is None:
             return []
 
@@ -359,9 +354,9 @@ class DBTools:
         if not memory_type or not memory_type.strip():
             raise ValueError("memory_type is required")
 
-        embedding = self._get_embedding(content)
+        embedding = EmbeddingModel.embed_passage(content)
         if embedding is None:
-            raise RuntimeError("embedding_function is required to create memory")
+            raise RuntimeError("embedding function is required to create memory")
 
         db = get_db()
         with db.get_session() as session:
@@ -443,9 +438,9 @@ class DBTools:
                 return {}
 
             if content is not None:
-                embedding = self._get_embedding(content)
+                embedding = EmbeddingModel.embed_passage(content)
                 if embedding is None:
-                    raise RuntimeError("embedding_function is required to update content")
+                    raise RuntimeError("embedding function is required to update content")
                 memory.content = content
                 memory.embedding = embedding
 

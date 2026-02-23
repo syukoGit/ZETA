@@ -31,17 +31,7 @@ async def main():
         logger.error("Error initializing database: %s", e)
         return
     
-    embedding_model_name = get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
-    logger.info(f"Loading embedding model: {embedding_model_name}...")
-    try:
-        embed_model = SentenceTransformer(embedding_model_name)
-        embedding_fn = lambda text: embed_model.encode(text).tolist()
-        logger.info(f"Embedding model loaded (dim={embed_model.get_sentence_embedding_dimension()}).")
-    except Exception as exc:
-        logger.error(f"Failed to load embedding model: {exc}")
-        return
-    
-    dbTools = DBTools(embedding_function=embedding_fn)
+    dbTools = DBTools()
     logger.info("Database initialized and session started.")
 
     dry_run = get("dry_run", True)
@@ -56,6 +46,8 @@ async def main():
                 logger.info("LLM call... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
 
                 previous_reporting = await run_llm_call(dbTools, previous_reporting)
+                if (previous_reporting is None):
+                    previous_reporting = {}
                 previous_reporting = json.loads(previous_reporting)
                 previous_reporting["as_of"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             except Exception as e:

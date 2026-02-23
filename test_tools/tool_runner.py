@@ -75,19 +75,15 @@ def init_database():
         raise
 
 
-def init_embedding_and_dbtools():
+def init_dbtools():
     """Load the embedding model and create the DBTools singleton."""
     from config import get as cfg_get
     from db.db_tools import DBTools
     from sentence_transformers import SentenceTransformer
 
-    _header("Embedding model + DBTools")
-    model_name = cfg_get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
-    _info(f"Loading model: {model_name} …")
-    embed_model = SentenceTransformer(model_name)
-    embedding_fn = lambda text: embed_model.encode(text).tolist()
-    DBTools(embedding_function=embedding_fn)
-    _ok(f"DBTools initialised (embedding dim={embed_model.get_sentence_embedding_dimension()}).")
+    _header("DBTools")
+    DBTools()
+    _ok(f"DBTools initialised.")
 
 
 async def init_ibkr():
@@ -144,6 +140,10 @@ def _prompt_value(name: str, field_info: dict) -> Any:
         for sub in any_of:
             if sub.get("type") == "null":
                 return None
+
+    # Empty input for non-optional fields without default – return None
+    if raw == "":
+        return None
 
     # Type coercion
     if field_type == "integer":
@@ -296,7 +296,7 @@ async def main():
         init_database()
 
         # 2. Embedding + DBTools
-        init_embedding_and_dbtools()
+        init_dbtools()
 
         # 3. IBKR
         ib = await init_ibkr()

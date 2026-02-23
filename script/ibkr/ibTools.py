@@ -21,7 +21,7 @@ async def init_ib_connection(dry_run: bool = True) -> IB:
         await asyncio.sleep(0.1)
 
     logger.info("IB TWS connected (dry_run=%s)", dry_run)
-    ib_sem = asyncio.Semaphore(1)
+    ib_sem = asyncio.Semaphore(5)
 
     _ = IBTools(ib, ib_sem=ib_sem, dry_run=dry_run)
 

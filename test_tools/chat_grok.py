@@ -116,25 +116,12 @@ async def _chat_with_grok() -> None:
         _fail("No model configured in config.json → llm.model")
         return
 
-    # ── Load embedding model ──
-    embedding_model_name = config_get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
-    _info(f"Loading embedding model: {embedding_model_name}...")
-    try:
-        from sentence_transformers import SentenceTransformer
-
-        embed_model = SentenceTransformer(embedding_model_name)
-        embedding_fn = lambda text: embed_model.encode(text).tolist()
-        _ok(f"Embedding model loaded (dim={embed_model.get_sentence_embedding_dimension()}).")
-    except Exception as exc:
-        _fail(f"Failed to load embedding model: {exc}")
-        return
-
     # ── Initialize DB ──
     _info("Initializing database...")
     try:
         db = init_db()
         db.create_tables()
-        DBTools(embedding_function=embedding_fn)
+        DBTools()
         _ok("Database ready.")
     except Exception as exc:
         _fail(f"Database init failed: {exc}")
