@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 from xai_sdk import Client
@@ -11,6 +12,17 @@ from llm.llm_provider import LLM, LLMFactory
 from llm.tools.base import get_tools
 
 logger = get_logger(__name__)
+
+
+class _ExtendedEncoder(json.JSONEncoder):
+    """JSON encoder that handles UUID and datetime objects."""
+    def default(self, obj):
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
 
 class GrokProvider(LLM):
     _client = None
@@ -46,11 +58,17 @@ class GrokProvider(LLM):
     
     def get_response(self) -> tuple[str, list, str]:
         tool_calls: list = []
+        last_response = None
         for response, chunk in self._chat.stream():
+            last_response = response
             if chunk.tool_calls:
                 tool_calls.extend(chunk.tool_calls)
         
-        response_content = response.content if response.content else ""
+        if last_response is None:
+            logger.warning("LLM stream returned no response chunk.")
+            return "", tool_calls, ""
+        
+        response_content = last_response.content if last_response.content else ""
         response_id = response.id
 
         logger.debug("LLM response (id=%s): %s tool_calls, content length=%d", response_id, len(tool_calls), len(response_content))
@@ -72,9 +90,10 @@ class GrokProvider(LLM):
 
             tool = get_tools()[name]
             validated = tool.args_model(**args).model_dump()
+            validated["message_id"] = str(message_id)
             result = await tool.handler(validated)
 
-            result_json = json.dumps(result)
+            result_json = json.dumps(result, cls=_ExtendedEncoder)
             return result_json
         except Exception as e:
             logger.error("Tool execution error: %s", e)
