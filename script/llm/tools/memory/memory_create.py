@@ -32,7 +32,7 @@ async def memory_create(args: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         return {
-            "memory_id": str(memory_created.get("memory_id")),
+            "memory_id": str(memory_created.get("id")),
             "memory": memory_created
         }
     except Exception as e:
