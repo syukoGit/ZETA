@@ -2,3 +2,6 @@
 
 __pycache__/
 venv/
+
+/test_tools/exports/
+/test_tools/exports/*
