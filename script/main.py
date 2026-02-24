@@ -19,6 +19,7 @@ async def main():
     ib = None
     db = None
     previous_reporting = None
+    time_before_next_run = None
 
     load_dotenv()
     setup_logging()
@@ -45,20 +46,19 @@ async def main():
             try:
                 logger.info("LLM call... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
 
-                previous_reporting = await run_llm_call(dbTools, previous_reporting)
-                if (previous_reporting is None):
-                    previous_reporting = {}
-                previous_reporting = json.loads(previous_reporting)
-                previous_reporting["as_of"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                (summary, time_before_next_run_s) = await run_llm_call(dbTools, previous_reporting)
+                
+                previous_reporting = summary
+                time_before_next_run = time_before_next_run_s if time_before_next_run_s is not None else get("default_wait_seconds", 600)
             except Exception as e:
                 logger.error("Error during LLM call: %s", e)
-                previous_reporting = {"timeBeforeNextRun": get("default_wait_seconds", 600)}
+                previous_reporting = {}
+                time_before_next_run = get("default_wait_seconds", 600)
             
             logger.info("Reporting (%s):", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
             logger.debug("Reporting data: %s", previous_reporting)
 
-            base_wait_time = previous_reporting.get("timeBeforeNextRun", get("default_wait_seconds", 600))
-            time_before_next_run = get_wait_time(base_wait_time)
+            time_before_next_run = get_wait_time(time_before_next_run)
 
             await countdown_display(time_before_next_run)
     except KeyboardInterrupt:
