@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from ibkr.ibTools import IBTools
 from llm.tools.base import register_tool
+from logger import get_logger
 
+logger = get_logger(__name__)
 
 class PlaceOrderArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
@@ -31,7 +33,8 @@ async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = PlaceOrderArgs(**args)
 
     ibTools = IBTools.get_instance()
-    
+    logger.info("Placing order: %s %s %s %s at %s", a.side, a.qty, a.symbol, a.exchange, a.limit_price if a.order_type == "LMT" else "MKT")
+
     contract: Stock
     if (a.primary_exchange):
         contract = Stock(a.symbol, a.exchange, a.currency, primaryExchange=a.primary_exchange)
