@@ -29,7 +29,7 @@ class GetQuoteArgs(BaseModel):
     exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for IBKR to choose the best exchange")
     primary_exchange: Optional[str] = Field(None, description="Optional primary exchange")
     timeout_s: float = Field(30.0, gt=MIN_TIMEOUT_S, description="Timeout for quote fetch (clamped to 15s minimum)")
-    market_data_type: int = Field(3, description="IB market data type (1=real-time, 2=frozen, 3=delayed, 4=delayed-frozen). Default 3 (delayed) for reliability.")
+    market_data_type: int = Field(1, description="IB market data type (1=real-time, 2=frozen, 3=delayed, 4=delayed-frozen). Default 3 (delayed) for reliability.")
     regulatory_snapshot: bool = Field(False)
 
 
@@ -89,7 +89,7 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
         used_data_type: Optional[int] = None
 
         for mdt in types_to_try:
-            logger.info(
+            logger.debug(
                 "get_quote %s: trying market_data_type=%d, timeout=%.1fs",
                 a.symbol, mdt, effective_timeout,
             )
