@@ -58,6 +58,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, max_loo
 
             if not tool_calls:
                 logger.debug("No tool calls. Continuing loop at iteration %d", loops_count)
+                llm.add_message("No tool calls received. If you want to end the run, call the close_run tool with the appropriate response and time_before_next_run.", role="system")
                 llm.new_chat(response_id)
                 continue
 
@@ -74,7 +75,6 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, max_loo
                     tool_db_id = dbTools.log_tool_call(message_id, close_run_tool_name, close_run_payload)
 
                     tool_result = await llm.execute_client_side_tool(close_run_called, message_id)
-                    logger.info("LLM closes the run at iteration %d", loops_count)
 
                     tool_result_data = json.loads(tool_result)
                     response = tool_result_data["summary"]
@@ -84,6 +84,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, max_loo
 
                     llm.close_chat()
                     dbTools.end_run(run_id)
+                    logger.info("LLM closes the run at iteration %d", loops_count)
 
                     return response, time_before_next_run_s
                 except Exception as e:
