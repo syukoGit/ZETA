@@ -28,7 +28,7 @@ class SummaryArgs(BaseModel):
 
 class CloseRunArgs(BaseModel):
     summary: SummaryArgs = Field(..., description="Structured factual summary of this run.")
-    time_before_next_run_s: float = Field(..., ge=1, le=900, description="Waiting time in seconds before the next run can be started.")
+    time_before_next_run_s: float = Field(..., ge=1, le=300, description="Waiting time in seconds before the next run can be started.")
 
 @register_tool("close_run", description="Close the current run with a summary and specify time before the next run can start.", args_model=CloseRunArgs)
 async def close_run(args: Dict[str, Any]) -> Dict[str, str]:
