@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import importlib
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 from config import get
 
@@ -17,7 +17,7 @@ class LLM(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def new_chat(self, previous_response_id: str | None = None):
+    def new_chat(self, mode: Literal["all", "run", "performance_review"] = "all", previous_response_id: str | None = None):
         pass
 
     def close_chat(self):
@@ -52,8 +52,7 @@ class LLMFactory:
         cls._providers[name] = provider
     
     @classmethod
-    def get_provider(cls) -> LLM:
-        llm_config = get("llm")
+    def get_provider(cls, llm_config: Any | None) -> LLM:
         if llm_config is None:
             raise ValueError("Missing LLM configuration.")
         

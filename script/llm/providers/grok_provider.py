@@ -1,7 +1,6 @@
 import json
 import os
-from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 from xai_sdk import Client
 from xai_sdk.chat import tool, system, user, assistant, tool_result
@@ -10,19 +9,9 @@ from xai_sdk.proto.v6.chat_pb2 import ToolCall
 from logger import get_logger
 from llm.llm_provider import LLM, LLMFactory
 from llm.tools.base import get_tools
+from utils.json_utils import ExtendedEncoder
 
 logger = get_logger(__name__)
-
-
-class _ExtendedEncoder(json.JSONEncoder):
-    """JSON encoder that handles UUID and datetime objects."""
-    def default(self, obj):
-        if isinstance(obj, UUID):
-            return str(obj)
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return super().default(obj)
-
 
 class GrokProvider(LLM):
     _client = None
@@ -35,11 +24,11 @@ class GrokProvider(LLM):
     def name(self) -> str:
         return "grok"
     
-    def new_chat(self, previous_response_id: str | None = None):
+    def new_chat(self, mode: Literal["all", "run", "performance_review"] = "all", previous_response_id: str | None = None):
         logger.debug("Creating new chat (model=%s, previous_id=%s)", self.model, previous_response_id)
         self._chat = self.client.chat.create(
             model=self.model,
-            tools=get_grok_tool(),
+            tools=get_grok_tool(mode),
             store_messages=True,
             previous_response_id=previous_response_id,
         )
@@ -93,7 +82,7 @@ class GrokProvider(LLM):
             validated["message_id"] = str(message_id)
             result = await tool.handler(validated)
 
-            result_json = json.dumps(result, cls=_ExtendedEncoder)
+            result_json = json.dumps(result, cls=ExtendedEncoder)
             return result_json
         except Exception as e:
             logger.error("Tool execution error: %s", e)
@@ -107,7 +96,7 @@ class GrokProvider(LLM):
         args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
         return name, args
 
-def get_grok_tool():
+def get_grok_tool(mode: Literal["all", "run", "performance_review"] = "all") -> list:
     return [
         x_search(enable_image_understanding=True, enable_video_understanding=True),
         web_search(enable_image_understanding=True),
@@ -117,7 +106,7 @@ def get_grok_tool():
                 description=v.description,
                 parameters=v.args_model.model_json_schema()
             )
-            for k, v in get_tools().items()
+            for k, v in get_tools(mode).items()
         ]
     ]
 
