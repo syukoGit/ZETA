@@ -66,68 +66,6 @@ class MessageRepository(BaseRepository[Message]):
         )
         return (result or 0) + 1
 
-    def get_messages_by_run(
-        self,
-        run_id: UUID,
-        limit: Optional[int] = None,
-        offset: int = 0,
-    ) -> List[Message]:
-        """
-        Get all messages for a run, ordered by sequence index.
-
-        Args:
-            run_id: The ID of the run.
-            limit: Maximum number of messages to return.
-            offset: Number of messages to skip.
-
-        Returns:
-            List of messages ordered by sequence.
-        """
-        query = (
-            self.session.query(Message)
-            .filter(Message.run_id == run_id)
-            .order_by(Message.sequence_index)
-            .offset(offset)
-        )
-        if limit:
-            query = query.limit(limit)
-        return query.all()
-
-    def get_messages_by_role(self, run_id: UUID, role: str) -> List[Message]:
-        """
-        Get all messages with a specific role in a run.
-
-        Args:
-            run_id: The ID of the run.
-            role: The role to filter by.
-
-        Returns:
-            List of messages with the specified role.
-        """
-        return (
-            self.session.query(Message)
-            .filter(Message.run_id == run_id, Message.role == role)
-            .order_by(Message.sequence_index)
-            .all()
-        )
-
-    def get_last_message(self, run_id: UUID) -> Optional[Message]:
-        """
-        Get the last message in a run.
-
-        Args:
-            run_id: The ID of the run.
-
-        Returns:
-            The last message, or None if no messages exist.
-        """
-        return (
-            self.session.query(Message)
-            .filter(Message.run_id == run_id)
-            .order_by(Message.sequence_index.desc())
-            .first()
-        )
-
     def get_conversation_context(
         self,
         run_id: UUID,
@@ -151,22 +89,3 @@ class MessageRepository(BaseRepository[Message]):
             .all()
         )
         return list(reversed(messages))
-
-    def count_messages(self, run_id: UUID) -> int:
-        """
-        Count the number of messages in a run.
-
-        Args:
-            run_id: The ID of the run.
-
-        Returns:
-            The number of messages.
-        """
-        from sqlalchemy import func
-
-        return (
-            self.session.query(func.count(Message.id))
-            .filter(Message.run_id == run_id)
-            .scalar()
-            or 0
-        )

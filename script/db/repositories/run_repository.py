@@ -1,7 +1,3 @@
-"""
-Repository for Run operations.
-"""
-
 from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
@@ -69,20 +65,6 @@ class RunRepository(BaseRepository[Run]):
             self.session.flush()
         return run
 
-    def get_active_runs(self) -> List[Run]:
-        """
-        Get all currently active (running) runs.
-
-        Returns:
-            List of active runs.
-        """
-        return (
-            self.session.query(Run)
-            .filter(Run.status == "running")
-            .order_by(Run.started_at.desc())
-            .all()
-        )
-    
     def get_filtered_runs(
             self,
             trigger_type: Optional[str] = None,
@@ -120,40 +102,6 @@ class RunRepository(BaseRepository[Run]):
         
         return query.all()
 
-    def get_runs_by_status(self, status: str) -> List[Run]:
-        """
-        Get all runs with a specific status.
-
-        Args:
-            status: The status to filter by.
-
-        Returns:
-            List of runs with the specified status.
-        """
-        return (
-            self.session.query(Run)
-            .filter(Run.status == status)
-            .order_by(Run.started_at.desc())
-            .all()
-        )
-
-    def get_recent_runs(self, limit: int = 10) -> List[Run]:
-        """
-        Get the most recent runs.
-
-        Args:
-            limit: Maximum number of runs to return.
-
-        Returns:
-            List of recent runs.
-        """
-        return (
-            self.session.query(Run)
-            .order_by(Run.started_at.desc())
-            .limit(limit)
-            .all()
-        )
-
     def get_run_with_details(self, run_id: UUID) -> Optional[Run]:
         """
         Get a run with messages and nested tool calls eagerly loaded.
@@ -171,21 +119,4 @@ class RunRepository(BaseRepository[Run]):
             )
             .filter(Run.id == run_id)
             .first()
-        )
-
-    def get_runs_by_objective_contains(self, search_term: str) -> List[Run]:
-        """
-        Search runs by objective.
-
-        Args:
-            search_term: Term to search for in objectives.
-
-        Returns:
-            List of matching runs.
-        """
-        return (
-            self.session.query(Run)
-            .filter(Run.objective.ilike(f"%{search_term}%"))
-            .order_by(Run.started_at.desc())
-            .all()
         )
