@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 from uuid import UUID
 from config import get
 from db.db_tools import DBTools
@@ -197,7 +197,7 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
             if close_run_called:
                 (tool_name, payload) = llm.get_tool_calls_info(close_run_called)
                 tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
-                
+
                 try:
                     tool_result = await llm.execute_client_side_tool(close_run_called, message_id)
 
@@ -263,18 +263,16 @@ async def execute_client_side_tools(llm: LLM, tool_calls: list, message_id: UUID
     
     return client_side_results
 
-async def get_snapshot_ib() -> str:
+async def get_snapshot_ib() -> Dict[str, Any]:
     positions = await get_positions({})
     cash_balance = await get_cash_balance({})
     open_trades = await get_open_trades({})
     market_status = await get_date_hour_utc_and_markets({})
 
-    snapshot_ib = {
+    return {
         "positions": positions["positions"],
         "cash_balances": cash_balance["cash_balances"],
         "open_trades": open_trades["open_trades"],
         "date_and_hour": market_status["date_and_hour"],
         "markets_status": market_status["markets"],
     }
-
-    return json.dumps(snapshot_ib, cls=ExtendedEncoder)
