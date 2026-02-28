@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import importlib
 from typing import Any, Literal
 from uuid import UUID
-from config import get
+from logger import get_logger
 
 
 class LLM(ABC):
@@ -44,6 +44,8 @@ class LLM(ABC):
     def get_tool_calls_info(self, tool_call: Any) -> tuple[str, dict]:
         pass
 
+logger = get_logger(__name__)
+
 class LLMFactory:
     _providers: dict[str, type[LLM]] = {}
 
@@ -76,4 +78,5 @@ class LLMFactory:
                 f"llm.providers.{provider_name}_provider"
             )
         except ImportError as e:
+            logger.error(f"Failed to load LLM provider module for '{provider_name}': {e}")
             pass
