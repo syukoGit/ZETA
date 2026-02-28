@@ -28,7 +28,7 @@ class PlaceOrderArgs(BaseModel):
         return self
 
 
-@register_tool("place_order", description="Place a stock order via Interactive Brokers TWS API.", args_model=PlaceOrderArgs)
+@register_tool("place_order", description="Place a stock order via Interactive Brokers TWS API.", args_model=PlaceOrderArgs, performance_review=False)
 async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = PlaceOrderArgs(**args)
 

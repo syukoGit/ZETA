@@ -29,7 +29,7 @@ class PreviewOrderArgs(BaseModel):
         return self
 
 
-@register_tool("preview_order", description="Preview a stock order via Interactive Brokers TWS API.", args_model=PreviewOrderArgs)
+@register_tool("preview_order", description="Preview a stock order via Interactive Brokers TWS API.", args_model=PreviewOrderArgs, performance_review=False)
 async def preview_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = PreviewOrderArgs(**args)
     
