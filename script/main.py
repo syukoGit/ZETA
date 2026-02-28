@@ -9,7 +9,8 @@ from db.database import init_db
 from db.db_tools import DBTools
 from config import get
 from logger import setup_logging, get_logger
-from llm.llm_call import run_llm_call
+from llm.llm_call import run_llm_call, run_llm_review_call
+from utils.market_status import get_market_status
 from utils.timing import get_wait_time, countdown_display
 
 logger = get_logger(__name__)
@@ -19,6 +20,7 @@ async def main():
     ib = None
     db = None
     previous_reporting = None
+    last_review_reporting = None
     time_before_next_run = None
 
     load_dotenv()
@@ -42,23 +44,44 @@ async def main():
     try:
         ib = await init_ib_connection(dry_run)
 
+        run_counter = get("performance_review", {}).get("every_n_trades", 15)
         while True:
-            try:
-                logger.info("LLM call... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
-
-                (summary, time_before_next_run_s) = await run_llm_call(dbTools, previous_reporting)
-                
-                previous_reporting = summary
-                time_before_next_run = time_before_next_run_s if time_before_next_run_s is not None else get("default_wait_seconds", 600)
-            except Exception as e:
-                logger.error("Error during LLM call: %s", e)
-                previous_reporting = {}
-                time_before_next_run = get("default_wait_seconds", 600)
+            if any(market_status.get("status") == "OPEN" for market_status in get_market_status(datetime.now(timezone.utc)).values()):
+                run_counter += 1
+            else:
+                run_counter = 0  # Reset counter if markets are closed
             
-            logger.info("Reporting (%s):", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
-            logger.debug("Reporting data: %s", previous_reporting)
+            if (run_counter >= get("performance_review", {}).get("every_n_trades", 15)):
+                run_counter = 0
+                try:
+                    logger.info("Running performance review... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
 
-            time_before_next_run = get_wait_time(time_before_next_run)
+                    last_review_reporting = await run_llm_review_call(dbTools, previous_reporting)
+
+                    logger.info("Performance review reporting (%s): %s", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), last_review_reporting)
+
+                    time_before_next_run = 1
+                except Exception as e:
+                    logger.error("Error during performance review LLM call: %s", e)
+                    last_review_reporting = None
+                    time_before_next_run = 1
+            else:
+                try:
+                    logger.info("LLM call... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+
+                    (summary, time_before_next_run_s) = await run_llm_call(dbTools, previous_reporting, last_review_reporting)
+                    
+                    previous_reporting = summary
+                    time_before_next_run = time_before_next_run_s if time_before_next_run_s is not None else get("default_wait_seconds", 600)
+                except Exception as e:
+                    logger.error("Error during LLM call: %s", e)
+                    previous_reporting = {}
+                    time_before_next_run = get("default_wait_seconds", 600)
+                
+                logger.info("Reporting (%s):", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+                logger.debug("Reporting data: %s", previous_reporting)
+
+                time_before_next_run = get_wait_time(time_before_next_run)
 
             await countdown_display(time_before_next_run)
     except KeyboardInterrupt:
