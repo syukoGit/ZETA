@@ -1,10 +1,10 @@
-from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from ..models import Message
+from ..time_utils import utc_now
 from .base_repository import BaseRepository
 
 
@@ -43,7 +43,7 @@ class MessageRepository(BaseRepository[Message]):
             role=role,
             content=content,
             sequence_index=sequence_index,
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
         )
         return self.create(message)
 

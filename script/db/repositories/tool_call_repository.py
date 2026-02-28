@@ -1,10 +1,10 @@
-from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from ..models import ToolCall
+from ..time_utils import utc_now
 from .base_repository import BaseRepository
 
 
@@ -37,7 +37,7 @@ class ToolCallRepository(BaseRepository[ToolCall]):
             tool_name=tool_name,
             input_payload=input_payload,
             status=status,
-            executed_at=datetime.utcnow(),
+            executed_at=utc_now(),
         )
         return self.create(tool_call)
 

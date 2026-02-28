@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import selectinload
 
 from ..models import Run, Message
+from ..time_utils import utc_now
 from .base_repository import BaseRepository
 
 
@@ -39,7 +40,7 @@ class RunRepository(BaseRepository[Run]):
             provider=provider,
             model=model,
             status="running",
-            started_at=datetime.now(timezone.utc),
+            started_at=utc_now(),
         )
         return self.create(run)
 
@@ -61,7 +62,7 @@ class RunRepository(BaseRepository[Run]):
         run = self.get_by_id(run_id)
         if run:
             run.status = status
-            run.ended_at = datetime.now(timezone.utc)
+            run.ended_at = utc_now()
             self.session.flush()
         return run
 

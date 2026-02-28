@@ -14,6 +14,8 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 
+from .time_utils import utc_now
+
 
 class Base(DeclarativeBase):
     """Base class for all models."""
@@ -46,7 +48,7 @@ class Message(Base):
     role: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sequence_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, default=datetime.utcnow)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, default=utc_now)
 
     # Relationships
     run: Mapped["Run"] = relationship("Run", back_populates="messages")
@@ -70,7 +72,7 @@ class ToolCall(Base):
     input_payload: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     output_payload: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, default=datetime.utcnow)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, default=utc_now)
 
     # Relationships
     message: Mapped["Message"] = relationship("Message", back_populates="tool_calls")
@@ -95,8 +97,8 @@ class MemoryEntry(Base):
     source: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(Text), nullable=True)
     meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=utc_now)
     embedding = mapped_column(Vector(1024), nullable=True)
 
     # Relationships
@@ -120,7 +122,7 @@ class MemoryAccessLog(Base):
     memory_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("memory_entries.id"), nullable=False)
     access_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 'read' or 'write'
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, default=datetime.utcnow)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, default=utc_now)
 
     # Relationships
     message: Mapped["Message"] = relationship("Message", back_populates="memory_access_logs")
