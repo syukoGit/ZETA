@@ -7,9 +7,9 @@ from llm.tools.base import register_tool
 
 
 class MemoryCreateArgs(BaseModel):
-    title: str = Field(None, description="Title for the memory entry.")
+    title: str = Field(..., description="Title for the memory entry.")
     content: str = Field(..., min_length=1, description="The content of the memory entry.")
-    memory_type: str = Field(None, description="Type/category for the memory entry.")
+    memory_type: str = Field(..., description="Type/category for the memory entry.")
     source: Optional[str] = Field(None, description="Source or origin of the memory entry.")
     tags: Optional[List[str]] = Field(None, description="List of tags associated with the memory entry.")
     meta: Optional[Dict[str, Any]] = Field(None, description="Additional metadata for the memory entry.")
