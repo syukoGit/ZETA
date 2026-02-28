@@ -6,7 +6,7 @@ from uuid import UUID
 from db.embedding_model import EmbeddingModel
 
 from .database import get_db
-from .models import MemoryAccessLog, MemoryEntry
+from .models import MemoryAccessLog, MemoryEntry, Run
 from .repositories import (
     RunRepository,
     MessageRepository,
@@ -84,6 +84,55 @@ class DBTools:
             run_repo = RunRepository(session)
             run = run_repo.complete_run(run_id, status)
             return run is not None
+
+    def get_run_by_id(self, run_id: UUID) -> Optional[Run]:
+        """
+        Retrieve a run by its ID.
+
+        Args:
+            run_id: The ID of the run.
+
+        Returns:
+            The Run object if found, else None.
+        """
+        db = get_db()
+        with db.get_session() as session:
+            run_repo = RunRepository(session)
+            run = run_repo.get_run_with_details(run_id)
+            return run
+
+    def get_filtered_runs(
+            self,
+            trigger_type: Optional[str] = None,
+            status: Optional[str] = None,
+            before: Optional[datetime] = None,
+            after: Optional[datetime] = None,
+            limit: Optional[int] = None
+        ) -> List[Run]:
+        """
+        Retrieve runs with optional filtering.
+
+        Args:
+            trigger_type: If provided, filters runs by trigger type.
+            status: If provided, filters runs by status.
+            before: If provided, only runs started before this time are returned.
+            after: If provided, only runs started after this time are returned.
+            limit: If provided, limits the number of runs returned.
+
+        Returns:
+            List of runs matching the filters.
+        """
+        db = get_db()
+        with db.get_session() as session:
+            run_repo = RunRepository(session)
+            runs = run_repo.get_filtered_runs(
+                trigger_type=trigger_type,
+                status=status,
+                before=before,
+                after=after,
+                limit=limit)
+            
+            return runs
 
     # ========== Message Tools ==========
 
