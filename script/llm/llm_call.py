@@ -81,10 +81,10 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                     break
 
             if close_run_called:
+                (close_run_tool_name, close_run_payload) = llm.get_tool_calls_info(close_run_called)
+                tool_db_id = dbTools.log_tool_call(message_id, close_run_tool_name, close_run_payload)
+                
                 try:
-                    (close_run_tool_name, close_run_payload) = llm.get_tool_calls_info(close_run_called)
-                    tool_db_id = dbTools.log_tool_call(message_id, close_run_tool_name, close_run_payload)
-
                     tool_result = await llm.execute_client_side_tool(close_run_called, message_id)
 
                     tool_result_data = json.loads(tool_result)
@@ -195,10 +195,10 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                     break
             
             if close_run_called:
+                (tool_name, payload) = llm.get_tool_calls_info(close_run_called)
+                tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+                
                 try:
-                    (tool_name, payload) = llm.get_tool_calls_info(close_run_called)
-                    tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
-
                     tool_result = await llm.execute_client_side_tool(close_run_called, message_id)
 
                     review_summary = json.loads(tool_result)
