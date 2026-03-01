@@ -4,9 +4,13 @@ from typing import Any, Literal
 from uuid import UUID
 from logger import get_logger
 
+logger = get_logger(__name__)
+
+type ChatMode = Literal["run", "review"]
 
 class LLM(ABC):
-    _chat = None
+    _chat_run = None
+    _chat_review = None
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
@@ -16,20 +20,18 @@ class LLM(ABC):
     def name(self) -> str:
         raise NotImplementedError
 
+    def close_chats(self):
+        if self._chat_run:
+            self._chat_run = None
+        if self._chat_review:
+            self._chat_review = None
+
     @abstractmethod
-    def new_chat(self, mode: Literal["run", "review"], previous_response_id: str | None = None):
+    def add_message(self, chat_type: ChatMode, content: str, role: str):
         pass
 
-    def close_chat(self):
-        if self._chat:
-            self._chat = None
-
     @abstractmethod
-    def add_message(self, content: str, role: str):
-        pass
-
-    @abstractmethod
-    def get_response(self) -> tuple[str, list, str]:
+    def get_response(self, chat_type: ChatMode) -> tuple[str, list, str]:
         pass
 
     @abstractmethod
@@ -44,7 +46,6 @@ class LLM(ABC):
     def get_tool_calls_info(self, tool_call: Any) -> tuple[str, dict]:
         pass
 
-logger = get_logger(__name__)
 
 class LLMFactory:
     _providers: dict[str, type[LLM]] = {}

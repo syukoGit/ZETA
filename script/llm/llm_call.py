@@ -24,53 +24,52 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
     run_id = None
 
     try:
-        llm.new_chat(mode="run")
         run_id = dbTools.start_run("llm_call", llm.name, llm.model)
 
         # Add initial system prompt to set the context for the LLM
-        llm.add_message(DEFAULT_START_PROMPT, role="system")
+        llm.add_message("run", DEFAULT_START_PROMPT, role="system")
         dbTools.add_message(run_id, "system", DEFAULT_START_PROMPT)
 
         # Add last reporting summary to the system prompt for context, if available
         summary_message = "PREVIOUS_SUMMARY: " + json.dumps(previous_reporting, cls=ExtendedEncoder) if previous_reporting else "No summary provided."
-        llm.add_message(summary_message, role="system")
+        llm.add_message("run", summary_message, role="system")
         dbTools.add_message(run_id, "system", summary_message)
 
         # Add IB snapshot to the system prompt for context
         snapshot_ib = await get_snapshot_ib()
         snapshot_message = "SNAPSHOT_IB: " + json.dumps(snapshot_ib, cls=ExtendedEncoder)
-        llm.add_message(snapshot_message, role="system")
+        llm.add_message("run", snapshot_message, role="system")
         dbTools.add_message(run_id, "system", snapshot_message)
         logger.debug("IB snapshot: %s", snapshot_ib)
 
         # Add last review summary to the system prompt for context, if available
         review_summary_message = "LAST_REVIEW: " + json.dumps(last_review, cls=ExtendedEncoder) if last_review else "No last review summary provided."
-        llm.add_message(review_summary_message, role="system")
+        llm.add_message("run", review_summary_message, role="system")
         dbTools.add_message(run_id, "system", review_summary_message)
         logger.debug("Last review summary: %s", review_summary_message)
 
         response = ""
         loops_count = 0
+        finished = False
 
-        while loops_count < max_loops:
+        while not finished and loops_count < max_loops:
             loops_count += 1
 
-            (response, tool_calls, response_id) = llm.get_response()
+            (response, tool_calls, response_id) = llm.get_response("run")
 
             if not response and not tool_calls:
                 message = "No response and no tool calls. Send tool_calls or response to continue the run. If you want to end the run, call the close_run tool with the appropriate response and time_before_next_run."
-                llm.add_message(message, role="system")
+                llm.add_message("run", message, role="system")
                 dbTools.add_message(run_id, "system", message)
                 logger.debug("No response and no tool calls, ending loop at iteration %d", loops_count)
                 continue
 
-            llm.add_message(response, role="assistant")
+            llm.add_message("run", response, role="assistant")
             message_id = dbTools.add_message(run_id, "assistant", response)
 
             if not tool_calls:
                 logger.debug("No tool calls. Continuing loop at iteration %d", loops_count)
-                llm.add_message("No tool calls received. If you want to end the run, call the close_run tool with the appropriate response and time_before_next_run.", role="system")
-                llm.new_chat(mode="run", previous_response_id=response_id)
+                llm.add_message("run", "No tool calls received. If you want to end the run, call the close_run tool with the appropriate response and time_before_next_run.", role="system")
                 continue
 
             # Check if llm calls close_run tool to end the loop early
@@ -93,7 +92,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
 
                     dbTools.complete_tool_call(tool_db_id, tool_result)
 
-                    llm.close_chat()
+                    llm.close_chats()
                     dbTools.end_run(run_id)
                     logger.info("LLM closes the run at iteration %d", loops_count)
 
@@ -101,7 +100,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                 except Exception as e:
                     error_message = f"Error executing tool close_run: {str(e)}"
                     logger.error("Error processing close_run tool call: %s", e)
-                    llm.add_message(error_message, role="tool_result")
+                    llm.add_message("run", error_message, role="tool_result")
                     dbTools.complete_tool_call(tool_db_id, error_message, False)
 
                     continue
@@ -110,8 +109,6 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
 
             # Collect client-side tool results before creating a new chat
             client_side_results = await execute_client_side_tools(llm, tool_calls, message_id, dbTools)
-
-            llm.new_chat(mode="run", previous_response_id=response_id)
             
             # Only continue the loop if there are client-side tool results to send back
             if not client_side_results:
@@ -119,15 +116,15 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                 continue
 
             for result in client_side_results:
-                llm.add_message(result, role="tool_result")
+                llm.add_message("run", result, role="tool_result")
         
-        llm.close_chat()
+        llm.close_chats()
         dbTools.end_run(run_id, status="cancelled")
 
         return None
     except Exception as e:
         logger.error("An error occurred during the LLM call: %s. Closing chat and ending run.", e, exc_info=True)
-        llm.close_chat()
+        llm.close_chats()
         dbTools.end_run(run_id, status="failed")
         return None
 
@@ -138,29 +135,28 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
     review_id = None
 
     try:
-        llm.new_chat(mode="review")
         review_id = dbTools.start_run("review", llm.name, llm.model)
 
         # Add initial system prompt to set the context for the LLM
-        llm.add_message(REVIEW_PROMPT, role="system")
+        llm.add_message("review", REVIEW_PROMPT, role="system")
         dbTools.add_message(review_id, "system", REVIEW_PROMPT)
 
         # Add last review summary to the system prompt for context, if available
         summary_message = "PREVIOUS_REVIEW: " + json.dumps(previous_review, cls=ExtendedEncoder) if previous_review else "No previous review summary provided."
-        llm.add_message(summary_message, role="system")
+        llm.add_message("review", summary_message, role="system")
         dbTools.add_message(review_id, "system", summary_message)
 
         # Add IB snapshot to the system prompt for context
         snapshot_ib = await get_snapshot_ib()
         snapshot_message = "SNAPSHOT_IB: " + json.dumps(snapshot_ib, cls=ExtendedEncoder)
-        llm.add_message(snapshot_message, role="system")
+        llm.add_message("review", snapshot_message, role="system")
         dbTools.add_message(review_id, "system", snapshot_message)
         logger.debug("IB snapshot for review: %s", snapshot_ib)
 
         # Add all runs since last review to the system prompt for context
         runs_to_review = await get_runs_to_review({})
         runs_message = "RUNS_TO_REVIEW: " + json.dumps(runs_to_review, cls=ExtendedEncoder)
-        llm.add_message(runs_message, role="system")
+        llm.add_message("review", runs_message, role="system")
         dbTools.add_message(review_id, "system", runs_message)
         logger.debug("Runs to review: %s", runs_message)
 
@@ -174,18 +170,17 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
 
             if not response and not tool_calls:
                 message = "No response and no tool calls. Send tool_calls or response to continue the review. If you want to end the review, call the close_review tool with the appropriate response."
-                llm.add_message(message, role="system")
+                llm.add_message("review", message, role="system")
                 dbTools.add_message(review_id, "system", message)
                 logger.debug("No response and no tool calls, ending review loop at iteration %d", loops_count)
                 continue
 
-            llm.add_message(response, role="assistant")
+            llm.add_message("review", response, role="assistant")
             message_id = dbTools.add_message(review_id, "assistant", response)
 
             if not tool_calls:
                 logger.debug("No tool calls. Continuing review loop at iteration %d", loops_count)
-                llm.add_message("No tool calls received. If you want to end the review, call the close_review tool with the appropriate response.", role="system")
-                llm.new_chat(mode="review", previous_response_id=response_id)
+                llm.add_message("review", "No tool calls received. If you want to end the review, call the close_review tool with the appropriate response.", role="system")
                 continue
 
             close_run_called = None
@@ -205,7 +200,7 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                     
                     dbTools.complete_tool_call(tool_db_id, tool_result)
 
-                    llm.close_chat()
+                    llm.close_chats()
                     dbTools.end_run(review_id)
                     logger.info("LLM closes the review at iteration %d", loops_count)
 
@@ -213,7 +208,7 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                 except Exception as e:
                     error_message = f"Error executing tool close_review: {str(e)}"
                     logger.error("Error processing close_review tool call: %s", e)
-                    llm.add_message(error_message, role="tool_result")
+                    llm.add_message("review", error_message, role="tool_result")
                     dbTools.complete_tool_call(tool_db_id, error_message, False)
 
                     continue
@@ -221,22 +216,21 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
             logger.debug("Tool calls received in review: %d", len(tool_calls))
 
             client_side_results = await execute_client_side_tools(llm, tool_calls, message_id, dbTools)
-            llm.new_chat(mode="review", previous_response_id=response_id)
 
             if not client_side_results:
                 logger.debug("All tool calls were server-side in review, ending loop at iteration %d", loops_count)
                 continue
 
             for result in client_side_results:
-                llm.add_message(result, role="tool_result")
+                llm.add_message("review", result, role="tool_result")
         
-        llm.close_chat()
+        llm.close_chats()
         dbTools.end_run(review_id, status="cancelled")
 
         return None
     except Exception as e:
         logger.error("An error occurred during the review LLM call: %s. Closing chat and ending review run.", e, exc_info=True)
-        llm.close_chat()
+        llm.close_chats()
         dbTools.end_run(review_id, status="failed")
         return None
 
