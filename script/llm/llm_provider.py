@@ -39,7 +39,7 @@ class LLM(ABC):
         pass
 
     @abstractmethod
-    async def execute_client_side_tool(self, tool_call: Any, message_id: UUID) -> str:
+    async def execute_client_side_tool(self, tool_call: Any, message_id: UUID) -> dict:
         pass
 
     @abstractmethod

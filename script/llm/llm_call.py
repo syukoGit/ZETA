@@ -64,23 +64,22 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
             logger.debug("Tool calls received: %d", len(tool_calls))
 
             for tc in tool_calls:
+                (tool_name, payload) = llm.get_tool_calls_info(tc)
+                tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+                
                 if llm.is_client_side_tool(tc):
-                    (tool_name, payload) = llm.get_tool_calls_info(tc)
-                    tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
-
                     try:
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result: %s", tool_name, tool_result)
 
-                        llm.add_message("run", tool_result, role="tool_result")
+                        llm.add_message("run", json.dumps(tool_result, cls=ExtendedEncoder), role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, tool_result)
 
                         if tool_name == "close_run":
                             logger.info("LLM requested to close the run at iteration %d", loops_count)
 
-                            output_data = json.loads(tool_result)
-                            output_summary = output_data["summary"]
-                            output_time_before_next_run_s = output_data["time_before_next_run_s"]
+                            output_summary = tool_result["summary"]
+                            output_time_before_next_run_s = tool_result["time_before_next_run_s"]
 
                             finished = True
                     except Exception as e:
@@ -89,7 +88,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                         dbTools.complete_tool_call(tool_db_id, error_message, False)
                         logger.error("Tool %s failed: %s", tool_name, e)
                 else:
-                    tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+                    logger.info("Server-side tool call received: %s with payload: %s", tool_name, payload)
                     dbTools.complete_tool_call(tool_db_id, None)
 
         llm.close_chats()
@@ -152,22 +151,21 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
             logger.debug("Tool calls received in review: %d", len(tool_calls))
 
             for tc in tool_calls:
+                (tool_name, payload) = llm.get_tool_calls_info(tc)
+                tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+                
                 if llm.is_client_side_tool(tc):
-                    (tool_name, payload) = llm.get_tool_calls_info(tc)
-                    tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
-
                     try:
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result in review: %s", tool_name, tool_result)
 
-                        llm.add_message("review", tool_result, role="tool_result")
+                        llm.add_message("review", json.dumps(tool_result, cls=ExtendedEncoder), role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, tool_result)
 
                         if tool_name == "close_review":
                             logger.info("LLM requested to close the review at iteration %d", loops_count)
 
-                            output_data = json.loads(tool_result)
-                            output_review_summary = output_data
+                            output_review_summary = tool_result
 
                             finished = True
                     except Exception as e:
@@ -175,7 +173,9 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                         llm.add_message("review", error_message, role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, error_message, False)
                         logger.error("Tool %s failed in review: %s", tool_name, e)
-            
+                else:
+                    logger.info("Server-side tool call received in review: %s with payload: %s", tool_name, payload)
+                    dbTools.complete_tool_call(tool_db_id, None)
         llm.close_chats()
         if finished:
             dbTools.end_run(review_id)
