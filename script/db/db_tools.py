@@ -226,7 +226,7 @@ class DBTools:
     def complete_tool_call(
         self,
         tool_call_id: UUID,
-        output_payload: dict,
+        output_payload: dict | None,
         success: bool = True,
     ) -> bool:
         """
