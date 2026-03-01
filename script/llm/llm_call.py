@@ -64,10 +64,10 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
             logger.debug("Tool calls received: %d", len(tool_calls))
 
             for tc in tool_calls:
+                (tool_name, payload) = llm.get_tool_calls_info(tc)
+                tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+                
                 if llm.is_client_side_tool(tc):
-                    (tool_name, payload) = llm.get_tool_calls_info(tc)
-                    tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
-
                     try:
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result: %s", tool_name, tool_result)
@@ -152,10 +152,10 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
             logger.debug("Tool calls received in review: %d", len(tool_calls))
 
             for tc in tool_calls:
+                (tool_name, payload) = llm.get_tool_calls_info(tc)
+                tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+                
                 if llm.is_client_side_tool(tc):
-                    (tool_name, payload) = llm.get_tool_calls_info(tc)
-                    tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
-
                     try:
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result in review: %s", tool_name, tool_result)
