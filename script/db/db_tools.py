@@ -159,7 +159,7 @@ class DBTools:
             message = message_repo.create_message(
                 run_id=run_id,
                 role=role,
-                content=content,
+                raw_content=content,
             )
             return message.id
 
