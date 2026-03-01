@@ -14,7 +14,7 @@ class ModifyOrderArgs(BaseModel):
     time_in_force: Optional[str] = None
 
 
-@register_tool("modify_order", description="Modify an existing order via Interactive Brokers TWS API.", args_model=ModifyOrderArgs, performance_review=False)
+@register_tool("modify_order", description="Modify an existing order via Interactive Brokers TWS API.", args_model=ModifyOrderArgs, review=False)
 async def modify_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = ModifyOrderArgs(**args)
 

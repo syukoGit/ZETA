@@ -8,7 +8,7 @@
         "provider": "grok",
         "model": "grok-4-1-fast-reasoning"
     },
-    "performance_review": {
+    "review": {
         "llm": {
             "provider": "grok",
             "model": "grok-4-1-fast-reasoning"

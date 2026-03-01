@@ -96,7 +96,7 @@ class GrokProvider(LLM):
         args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
         return name, args
 
-def get_grok_tool(mode: Literal["all", "run", "performance_review"] = "all") -> list:
+def get_grok_tool(mode: Literal["run", "review"]) -> list:
     return [
         x_search(enable_image_understanding=True, enable_video_understanding=True),
         web_search(enable_image_understanding=True),

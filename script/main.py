@@ -44,25 +44,25 @@ async def main():
     try:
         ib = await init_ib_connection(dry_run)
 
-        run_counter = get("performance_review", {}).get("every_n_trades", 15)
+        run_counter = get("review", {}).get("every_n_trades", 15)
         while True:
             if any(market_status.get("status") == "OPEN" for market_status in get_market_status(datetime.now(timezone.utc)).values()):
                 run_counter += 1
             else:
                 run_counter = 0  # Reset counter if markets are closed
             
-            if (run_counter >= get("performance_review", {}).get("every_n_trades", 15)):
+            if (run_counter >= get("review", {}).get("every_n_trades", 15)):
                 run_counter = 0
                 try:
-                    logger.info("Running performance review... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+                    logger.info("Running review... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
 
                     last_review_reporting = await run_llm_review_call(dbTools, previous_reporting)
 
-                    logger.info("Performance review reporting (%s): %s", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), last_review_reporting)
+                    logger.info("Review reporting (%s): %s", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), last_review_reporting)
 
                     time_before_next_run = 1
                 except Exception as e:
-                    logger.error("Error during performance review LLM call: %s", e)
+                    logger.error("Error during review LLM call: %s", e)
                     last_review_reporting = None
                     time_before_next_run = 1
             else:

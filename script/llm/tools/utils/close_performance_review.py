@@ -9,7 +9,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class ClosePerformanceReviewArgs(BaseModel):
+class CloseReviewArgs(BaseModel):
     portfolio_overview: str = Field(
         ...,
         description="Objective overview of portfolio evolution and run behavior since last review."
@@ -47,9 +47,9 @@ class ClosePerformanceReviewArgs(BaseModel):
         description="Confidence in current strategic posture (0=unstable, 10=validated edge)."
     )
 
-@register_tool("close_performance_review", description="Close the performance review with structured insights and adjustments.", args_model=ClosePerformanceReviewArgs, run=False)
-async def close_performance_review(args: Dict[str, Any]) -> Dict[str, str]:
-    a = ClosePerformanceReviewArgs(**args)
+@register_tool("close_review", description="Close the review with structured insights and adjustments.", args_model=CloseReviewArgs, review=False)
+async def close_review(args: Dict[str, Any]) -> Dict[str, str]:
+    a = CloseReviewArgs(**args)
 
     return {
         "portfolio_overview": a.portfolio_overview,

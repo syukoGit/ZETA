@@ -1,3 +1,0 @@
-PERFORMANCE_REVIEW_PROMPT = """
-
-"""

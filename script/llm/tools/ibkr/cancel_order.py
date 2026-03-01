@@ -11,7 +11,7 @@ class CancelOrderArgs(BaseModel):
     order_id: int = Field(..., gt=0)
 
 
-@register_tool("cancel_order", description="Cancel an existing order via Interactive Brokers TWS API.", args_model=CancelOrderArgs, performance_review=False)
+@register_tool("cancel_order", description="Cancel an existing order via Interactive Brokers TWS API.", args_model=CancelOrderArgs, review=False)
 async def cancel_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = CancelOrderArgs(**args)
 

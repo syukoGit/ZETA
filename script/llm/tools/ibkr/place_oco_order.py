@@ -40,7 +40,7 @@ class PlaceOcoOrderArgs(BaseModel):
         return self
 
 
-# @register_tool("place_oco_order", description="Place an OCO (One-Cancels-the-Other) order via Interactive Brokers TWS API.", args_model=PlaceOcoOrderArgs, performance_review=False)
+# @register_tool("place_oco_order", description="Place an OCO (One-Cancels-the-Other) order via Interactive Brokers TWS API.", args_model=PlaceOcoOrderArgs, review=False)
 async def place_oco_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = PlaceOcoOrderArgs(**args)
 

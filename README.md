@@ -4,7 +4,7 @@
 
 **ZETA** (Zero-Touch Execution & Trading Algorithm) is a fully autonomous trading agent that uses a Large Language Model (LLM) to analyze markets, make investment decisions, and execute orders on US equities through **Interactive Brokers (IBKR)**. It operates in a continuous loop: at each iteration, the LLM receives a snapshot of the account state, consults its tools (market data, memory, web/X search), then decides whether to act or observe.
 
-ZETA also runs a periodic **performance review** cycle that analyzes recent runs and injects strategic directives into future trading runs.
+ZETA also runs a periodic **review** cycle that analyzes recent runs and injects strategic directives into future trading runs.
 
 ZETA is not a simple assistant that suggests trades — it **executes them itself**, from opportunity scanning to order placement, including risk management and continuous learning.
 
@@ -22,7 +22,7 @@ ZETA is not a simple assistant that suggests trades — it **executes them itsel
 │  3. Tool call execution (IBKR, memory, history, etc.)  │
 │  4. close_run returns summary + next wait               │
 │  5. Dynamic market-aware wait → back to step 1         │
-│  6. Periodic performance_review cycle                  │
+│  6. Periodic review cycle                  │
 └─────────────────────────────────────────────────────────┘
          │                    │                  │
          ▼                    ▼                  ▼
@@ -36,12 +36,12 @@ ZETA is not a simple assistant that suggests trades — it **executes them itsel
 
 | Module | Role |
 | ------ | ---- |
-| `script/main.py` | Main loop: initializes DB, connects to IBKR, runs trading loops plus periodic performance reviews |
-| `script/llm/llm_call.py` | Orchestrates both run and performance-review calls, including tool loop and structured close tools |
+| `script/main.py` | Main loop: initializes DB, connects to IBKR, runs trading loops plus periodic reviews |
+| `script/llm/llm_call.py` | Orchestrates both run and review calls, including tool loop and structured close tools |
 | `script/llm/llm_provider.py` | LLM provider abstraction (abstract `LLM` class + factory with dynamic loading) |
 | `script/llm/providers/grok_provider.py` | Grok (xAI) provider implementation with streaming, tool calling, and built-in web/X search |
 | `script/llm/start_prompt.py` | Complete system prompt defining ZETA's run behavior (trading rules, risk management, close requirements) |
-| `script/llm/performance_review_prompt.py` | Dedicated prompt for strategic portfolio/run review mode |
+| `script/llm/review_prompt.py` | Dedicated prompt for strategic portfolio/run review mode |
 | `script/llm/tools/` | Auto-discovered tool registry that the LLM can call |
 | `script/ibkr/ibTools.py` | Interactive Brokers connection singleton via `ib_async` |
 | `script/db/` | Database layer (SQLAlchemy + pgvector): models, sessions, repositories |
@@ -89,13 +89,13 @@ ZETA exposes a set of tools that the LLM can call autonomously during each itera
 | --- | --- |
 | `get_date_hour_utc_and_markets` | Retrieves current UTC date/time and open/closed status of tracked US exchanges |
 | `close_run` | Closes the current run with a structured summary and next wait time |
-| `close_performance_review` | Closes the performance review with structured strategic output |
+| `close_review` | Closes the review with structured strategic output |
 
 ### History Tools (review mode)
 
 | Tool | Description |
 | --- | --- |
-| `get_runs_to_review` | Retrieves runs executed since the last performance review |
+| `get_runs_to_review` | Retrieves runs executed since the last review |
 | `get_run_details` | Retrieves full details of a run (messages + tool calls) |
 
 ### Native Provider Tools (Grok/xAI)
@@ -135,7 +135,7 @@ Every memory access (read/write) is **traced** and linked to the LLM message tha
 Run trigger types include:
 
 - `llm_call`
-- `performance_review`
+- `review`
 
 ---
 
@@ -153,7 +153,7 @@ At each run, ZETA follows a structured process:
 8. **Learning** — Update vector memory after major events
 9. **Structured close** — End run via `close_run` with summary + `time_before_next_run_s`
 
-In parallel, a periodic performance review cycle analyzes recent runs and ends through `close_performance_review`.
+In parallel, a periodic review cycle analyzes recent runs and ends through `close_review`.
 
 ---
 
@@ -185,7 +185,7 @@ ZETA automatically adapts its cadence based on context:
     "provider": "grok",
     "model": "grok-4-1-fast-reasoning"
   },
-  "performance_review": {
+  "review": {
     "llm": {
       "provider": "grok",
       "model": "grok-4-1-fast-reasoning"
@@ -210,7 +210,7 @@ ZETA automatically adapts its cadence based on context:
 | `off_hours_wait_seconds` | Maximum wait while markets are closed |
 | `llm.provider` | LLM provider to use (`grok`) |
 | `llm.model` | Specific LLM model |
-| `performance_review.*` | Settings for periodic strategic review loop |
+| `review.*` | Settings for periodic strategic review loop |
 | `embedding_model` | Embedding model for vector memory |
 | `ibkr.*` | IBKR connection settings (`host`, `port`, `clientId`) |
 

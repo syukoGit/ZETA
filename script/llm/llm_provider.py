@@ -17,7 +17,7 @@ class LLM(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def new_chat(self, mode: Literal["all", "run", "performance_review"] = "all", previous_response_id: str | None = None):
+    def new_chat(self, mode: Literal["run", "review"], previous_response_id: str | None = None):
         pass
 
     def close_chat(self):
