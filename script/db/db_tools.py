@@ -140,7 +140,7 @@ class DBTools:
         self,
         run_id: UUID,
         role: str,
-        content: str,
+        content: Any,
     ) -> UUID:
         """
         Add a message to a run.
