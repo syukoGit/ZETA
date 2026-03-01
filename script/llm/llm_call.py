@@ -88,7 +88,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                         dbTools.complete_tool_call(tool_db_id, error_message, False)
                         logger.error("Tool %s failed: %s", tool_name, e)
                 else:
-                    tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+                    logger.info("Server-side tool call received: %s with payload: %s", tool_name, payload)
                     dbTools.complete_tool_call(tool_db_id, None)
 
         llm.close_chats()
@@ -173,7 +173,9 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                         llm.add_message("review", error_message, role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, error_message, False)
                         logger.error("Tool %s failed in review: %s", tool_name, e)
-            
+                else:
+                    logger.info("Server-side tool call received in review: %s with payload: %s", tool_name, payload)
+                    dbTools.complete_tool_call(tool_db_id, None)
         llm.close_chats()
         if finished:
             dbTools.end_run(review_id)

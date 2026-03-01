@@ -80,7 +80,7 @@ class GrokProvider(LLM):
                 raise ValueError("Invalid tool call type.")
 
             name, args = self.get_tool_calls_info(tool_call)          
-            logger.debug("Dispatching tool: %s", name)
+            logger.debug("Dispatching tool: %s with args: %s", name, args)
 
             tool = get_tools()[name]
             validated = tool.args_model(**args).model_dump()
