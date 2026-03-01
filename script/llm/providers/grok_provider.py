@@ -1,7 +1,6 @@
 import json
 import os
-from typing import Any, Literal
-from uuid import UUID
+from typing import Any
 from xai_sdk import Client
 from xai_sdk.chat import tool, system, user, assistant, tool_result
 from xai_sdk.tools import web_search, x_search, get_tool_call_type
@@ -9,7 +8,6 @@ from xai_sdk.proto.v6.chat_pb2 import ToolCall
 from logger import get_logger
 from llm.llm_provider import LLM, ChatMode, LLMFactory
 from llm.tools.base import get_tools
-from utils.json_utils import ExtendedEncoder
 
 logger = get_logger(__name__)
 
@@ -76,7 +74,7 @@ class GrokProvider(LLM):
         tool_call_type = get_tool_call_type(tool_call)
         return tool_call_type == "client_side_tool"
     
-    async def execute_client_side_tool(self, tool_call, message_id) -> str:
+    async def execute_client_side_tool(self, tool_call, message_id) -> dict:
         try:
             if not isinstance(tool_call, ToolCall):
                 raise ValueError("Invalid tool call type.")
@@ -89,8 +87,7 @@ class GrokProvider(LLM):
             validated["message_id"] = str(message_id)
             result = await tool.handler(validated)
 
-            result_json = json.dumps(result, cls=ExtendedEncoder)
-            return result_json
+            return result
         except Exception as e:
             logger.error("Tool execution error: %s", e)
             raise ValueError(f"Error: {str(e)}")

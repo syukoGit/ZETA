@@ -72,15 +72,14 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result: %s", tool_name, tool_result)
 
-                        llm.add_message("run", tool_result, role="tool_result")
+                        llm.add_message("run", json.dumps(tool_result, cls=ExtendedEncoder), role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, tool_result)
 
                         if tool_name == "close_run":
                             logger.info("LLM requested to close the run at iteration %d", loops_count)
 
-                            output_data = json.loads(tool_result)
-                            output_summary = output_data["summary"]
-                            output_time_before_next_run_s = output_data["time_before_next_run_s"]
+                            output_summary = tool_result["summary"]
+                            output_time_before_next_run_s = tool_result["time_before_next_run_s"]
 
                             finished = True
                     except Exception as e:
@@ -160,14 +159,13 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result in review: %s", tool_name, tool_result)
 
-                        llm.add_message("review", tool_result, role="tool_result")
+                        llm.add_message("review", json.dumps(tool_result, cls=ExtendedEncoder), role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, tool_result)
 
                         if tool_name == "close_review":
                             logger.info("LLM requested to close the review at iteration %d", loops_count)
 
-                            output_data = json.loads(tool_result)
-                            output_review_summary = output_data
+                            output_review_summary = tool_result
 
                             finished = True
                     except Exception as e:
