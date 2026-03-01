@@ -55,7 +55,7 @@ class GrokProvider(LLM):
         else:
             raise ValueError(f"Unsupported message role: {role}")
     
-    def get_response(self, chat_type) -> tuple[str, list, str]:
+    def get_response(self, chat_type) -> tuple[Any, list]:
         if chat_type == "run":
             chat = self._chat_run
         elif chat_type == "review":
@@ -65,12 +65,10 @@ class GrokProvider(LLM):
         
         response = chat.sample()
         
-        response_content = response.content
         tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
-        response_id = response.id
 
-        logger.debug("LLM response (id=%s): %s tool_calls, content length=%d", response_id, len(tool_calls), len(response_content))
-        return response_content, tool_calls, response_id
+        logger.debug("LLM response: %s tool_calls, content length=%d", len(tool_calls), len(response.content))
+        return response, tool_calls
 
     def is_client_side_tool(self, tool_call) -> bool:
         if not isinstance(tool_call, ToolCall):
@@ -95,7 +93,7 @@ class GrokProvider(LLM):
             return result_json
         except Exception as e:
             logger.error("Tool execution error: %s", e)
-            return f"Error: {str(e)}"
+            raise ValueError(f"Error: {str(e)}")
     
     def get_tool_calls_info(self, tool_call) -> tuple[str, dict]:
         if not isinstance(tool_call, ToolCall):

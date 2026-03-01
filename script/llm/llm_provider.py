@@ -31,7 +31,7 @@ class LLM(ABC):
         pass
 
     @abstractmethod
-    def get_response(self, chat_type: ChatMode) -> tuple[str, list, str]:
+    def get_response(self, chat_type: ChatMode) -> tuple[Any, list]:
         pass
 
     @abstractmethod
