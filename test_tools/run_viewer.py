@@ -8,7 +8,6 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -18,6 +17,8 @@ from uuid import UUID
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "script"))
+
+from utils.json_utils import dumps_json
 
 from dotenv import load_dotenv
 
@@ -186,7 +187,7 @@ def _print_tool_call(tc, indent: int = 8) -> None:
 
     if tc.input_payload:
         try:
-            payload_str = json.dumps(tc.input_payload, indent=2, ensure_ascii=False, default=str)
+            payload_str = dumps_json(tc.input_payload, indent=2)
         except Exception:
             payload_str = str(tc.input_payload)
         print(f"{pad}{DIM}input:{RESET}")
@@ -195,7 +196,7 @@ def _print_tool_call(tc, indent: int = 8) -> None:
 
     if tc.output_payload:
         try:
-            out_str = json.dumps(tc.output_payload, indent=2, ensure_ascii=False, default=str)
+            out_str = dumps_json(tc.output_payload, indent=2)
         except Exception:
             out_str = str(tc.output_payload)
         print(f"{pad}{DIM}output:{RESET}")

@@ -140,7 +140,7 @@ class DBTools:
         self,
         run_id: UUID,
         role: str,
-        content: str,
+        content: Any,
     ) -> UUID:
         """
         Add a message to a run.
@@ -159,7 +159,7 @@ class DBTools:
             message = message_repo.create_message(
                 run_id=run_id,
                 role=role,
-                content=content,
+                raw_content=content,
             )
             return message.id
 
@@ -226,7 +226,7 @@ class DBTools:
     def complete_tool_call(
         self,
         tool_call_id: UUID,
-        output_payload: dict,
+        output_payload: dict | None,
         success: bool = True,
     ) -> bool:
         """

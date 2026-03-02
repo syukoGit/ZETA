@@ -56,7 +56,7 @@ async def main():
                 try:
                     logger.info("Running review... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
 
-                    last_review_reporting = await run_llm_review_call(dbTools, previous_reporting)
+                    last_review_reporting = await run_llm_review_call(dbTools, last_review_reporting)
 
                     logger.info("Review reporting (%s): %s", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), last_review_reporting)
 

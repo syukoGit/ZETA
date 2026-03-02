@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Any, Optional, List
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..models import Message
 from ..time_utils import utc_now
 from .base_repository import BaseRepository
+from ...utils.json_utils import to_json_compatible
 
 
 class MessageRepository(BaseRepository[Message]):
@@ -20,7 +21,7 @@ class MessageRepository(BaseRepository[Message]):
         self,
         run_id: UUID,
         role: str,
-        content: str,
+        raw_content: Any,
         sequence_index: Optional[int] = None,
     ) -> Message:
         """
@@ -29,7 +30,7 @@ class MessageRepository(BaseRepository[Message]):
         Args:
             run_id: The ID of the run this message belongs to.
             role: The role (user, assistant, system).
-            content: The message content.
+            raw_content: The raw content of the message.
             sequence_index: The sequence index. If not provided, auto-calculates.
 
         Returns:
@@ -37,11 +38,19 @@ class MessageRepository(BaseRepository[Message]):
         """
         if sequence_index is None:
             sequence_index = self._get_next_sequence_index(run_id)
+        
+        if isinstance(raw_content, str):
+            content = raw_content
+        elif isinstance(raw_content, dict):
+            content = raw_content.get("content", "")
+        else:
+            content = None
 
         message = Message(
             run_id=run_id,
             role=role,
             content=content,
+            raw_content=to_json_compatible(raw_content),
             sequence_index=sequence_index,
             created_at=utc_now(),
         )
