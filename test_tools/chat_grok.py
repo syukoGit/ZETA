@@ -19,6 +19,8 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "script"))
 
+from utils.json_utils import dumps_json
+
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(_root, ".env"))
@@ -57,7 +59,7 @@ def _display_tool_call(index: int, name: str, args: dict) -> None:
     print(f"\n  {YELLOW}┌─ Tool call #{index}: {BOLD}{name}{RESET}")
     if args:
         for k, v in args.items():
-            val_str = json.dumps(v, default=str) if not isinstance(v, str) else v
+            val_str = dumps_json(v) if not isinstance(v, str) else v
             print(f"  {YELLOW}│  {CYAN}{k}{RESET}: {val_str}")
     else:
         print(f"  {YELLOW}│  {DIM}(no arguments){RESET}")
@@ -251,7 +253,7 @@ async def _chat_with_grok() -> None:
                         tool_spec = available_tools[name]
                         validated = tool_spec.args_model(**args).model_dump()
                         result = await tool_spec.handler(validated)
-                        result_json = json.dumps(result, default=str)
+                        result_json = dumps_json(result)
                         results.append(result_json)
                         truncated = result_json[:300] + ("…" if len(result_json) > 300 else "")
                         _ok(f"{name} → {truncated}")

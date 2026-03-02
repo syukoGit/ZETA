@@ -1,4 +1,3 @@
-import json
 from typing import Any, Dict, Tuple
 from config import get
 from db.db_tools import DBTools
@@ -11,7 +10,7 @@ from llm.start_prompt import DEFAULT_START_PROMPT
 from llm.tools.ibkr.get_cash_balance import get_cash_balance
 from llm.tools.ibkr.get_open_trades import get_open_trades
 from llm.tools.ibkr.get_positions import get_positions
-from utils.json_utils import ExtendedEncoder
+from utils.json_utils import dumps_json
 
 logger = get_logger(__name__)
 
@@ -30,19 +29,19 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
         dbTools.add_message(run_id, "system", DEFAULT_START_PROMPT)
 
         # Add last reporting summary to the system prompt for context, if available
-        summary_message = "PREVIOUS_SUMMARY: " + json.dumps(previous_reporting, cls=ExtendedEncoder) if previous_reporting else "No summary provided."
+        summary_message = "PREVIOUS_SUMMARY: " + dumps_json(previous_reporting) if previous_reporting else "No summary provided."
         llm.add_message("run", summary_message, role="system")
         dbTools.add_message(run_id, "system", summary_message)
 
         # Add IB snapshot to the system prompt for context
         snapshot_ib = await get_snapshot_ib()
-        snapshot_message = "SNAPSHOT_IB: " + json.dumps(snapshot_ib, cls=ExtendedEncoder)
+        snapshot_message = "SNAPSHOT_IB: " + dumps_json(snapshot_ib)
         llm.add_message("run", snapshot_message, role="system")
         dbTools.add_message(run_id, "system", snapshot_message)
         logger.debug("IB snapshot: %s", snapshot_ib)
 
         # Add last review summary to the system prompt for context, if available
-        review_summary_message = "LAST_REVIEW: " + json.dumps(last_review, cls=ExtendedEncoder) if last_review else "No last review summary provided."
+        review_summary_message = "LAST_REVIEW: " + dumps_json(last_review) if last_review else "No last review summary provided."
         llm.add_message("run", review_summary_message, role="system")
         dbTools.add_message(run_id, "system", review_summary_message)
         logger.debug("Last review summary: %s", review_summary_message)
@@ -71,7 +70,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result: %s", tool_name, tool_result)
 
-                        llm.add_message("run", json.dumps(tool_result, cls=ExtendedEncoder), role="tool_result")
+                        llm.add_message("run", dumps_json(tool_result), role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, tool_result)
 
                         if tool_name == "close_run":
@@ -117,20 +116,20 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
         dbTools.add_message(review_id, "system", REVIEW_PROMPT)
 
         # Add last review summary to the system prompt for context, if available
-        summary_message = "PREVIOUS_REVIEW: " + json.dumps(previous_review, cls=ExtendedEncoder) if previous_review else "No previous review summary provided."
+        summary_message = "PREVIOUS_REVIEW: " + dumps_json(previous_review) if previous_review else "No previous review summary provided."
         llm.add_message("review", summary_message, role="system")
         dbTools.add_message(review_id, "system", summary_message)
 
         # Add IB snapshot to the system prompt for context
         snapshot_ib = await get_snapshot_ib()
-        snapshot_message = "SNAPSHOT_IB: " + json.dumps(snapshot_ib, cls=ExtendedEncoder)
+        snapshot_message = "SNAPSHOT_IB: " + dumps_json(snapshot_ib)
         llm.add_message("review", snapshot_message, role="system")
         dbTools.add_message(review_id, "system", snapshot_message)
         logger.debug("IB snapshot for review: %s", snapshot_ib)
 
         # Add all runs since last review to the system prompt for context
         runs_to_review = await get_runs_to_review({})
-        runs_message = "RUNS_TO_REVIEW: " + json.dumps(runs_to_review, cls=ExtendedEncoder)
+        runs_message = "RUNS_TO_REVIEW: " + dumps_json(runs_to_review)
         llm.add_message("review", runs_message, role="system")
         dbTools.add_message(review_id, "system", runs_message)
         logger.debug("Runs to review: %s", runs_message)
@@ -158,7 +157,7 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                         tool_result = await llm.execute_client_side_tool(tc, message_id)
                         logger.debug("Tool %s result in review: %s", tool_name, tool_result)
 
-                        llm.add_message("review", json.dumps(tool_result, cls=ExtendedEncoder), role="tool_result")
+                        llm.add_message("review", dumps_json(tool_result), role="tool_result")
                         dbTools.complete_tool_call(tool_db_id, tool_result)
 
                         if tool_name == "close_review":

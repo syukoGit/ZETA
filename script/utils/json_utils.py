@@ -53,6 +53,8 @@ def to_json_compatible(value: Any) -> Any:
     return str(value)
 
 
-def dumps_json(value: Any) -> str:
+def dumps_json(value: Any, **kwargs: Any) -> str:
     """Serialize using project JSON rules for DB JSON/JSONB columns."""
-    return json.dumps(to_json_compatible(value), ensure_ascii=False)
+    options = {"ensure_ascii": False}
+    options.update(kwargs)
+    return json.dumps(to_json_compatible(value), **options)

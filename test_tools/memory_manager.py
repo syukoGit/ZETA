@@ -19,6 +19,8 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "script"))
 
+from utils.json_utils import dumps_json
+
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(_root, ".env"))
@@ -85,7 +87,7 @@ def _print_memory(mem: dict, index: int | None = None) -> None:
 
     meta = mem.get("meta")
     if meta:
-        print(f"  {DIM}Meta: {json.dumps(meta, default=str)}{RESET}")
+        print(f"  {DIM}Meta: {dumps_json(meta)}{RESET}")
 
 
 # ── Commands ─────────────────────────────────────────────────────────────

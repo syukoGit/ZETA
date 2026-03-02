@@ -26,6 +26,8 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "script"))
 
+from utils.json_utils import dumps_json
+
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(_root, ".env"))
@@ -277,7 +279,7 @@ async def interactive_loop(tools: dict):
             result = await tool_spec.handler(args)
             print(f"\n{GREEN}{'─' * 55}")
             print(f"  Result:{RESET}")
-            print(json.dumps(result, indent=2, default=str))
+            print(dumps_json(result, indent=2))
             print(f"{GREEN}{'─' * 55}{RESET}")
         except Exception as exc:
             _fail(f"Execution failed: {exc}")
