@@ -5,18 +5,6 @@ from typing import Any, Mapping
 from uuid import UUID
 
 
-class ExtendedEncoder(json.JSONEncoder):
-    """JSON encoder that handles UUID and datetime objects."""
-    def default(self, obj):
-        if isinstance(obj, UUID):
-            return str(obj)
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        if isinstance(obj, Decimal):
-            return str(obj)
-        return super().default(obj)
-
-
 def _to_json_key(key: Any) -> str:
     """Convert mapping keys to JSON-safe string representation."""
     if isinstance(key, str):
