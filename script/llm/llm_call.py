@@ -1,18 +1,17 @@
 import json
 from typing import Any, Dict, Tuple
-from uuid import UUID
 from config import get
 from db.db_tools import DBTools
 from llm.review_prompt import REVIEW_PROMPT
 from llm.tools.history.get_runs_to_review import get_runs_to_review
 from llm.tools.utils.get_date_hour_utc_and_markets import get_date_hour_utc_and_markets
 from logger import get_logger
-from llm.llm_provider import LLM, LLMFactory
+from llm.llm_provider import LLMFactory
 from llm.start_prompt import DEFAULT_START_PROMPT
 from llm.tools.ibkr.get_cash_balance import get_cash_balance
 from llm.tools.ibkr.get_open_trades import get_open_trades
 from llm.tools.ibkr.get_positions import get_positions
-from utils.json_utils import ExtendedEncoder, is_valid_json
+from utils.json_utils import ExtendedEncoder
 
 logger = get_logger(__name__)
 
@@ -85,7 +84,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
                     except Exception as e:
                         error_message = f"Error executing tool {tool_name}: {str(e)}"
                         llm.add_message("run", error_message, role="tool_result")
-                        dbTools.complete_tool_call(tool_db_id, error_message, False)
+                        dbTools.complete_tool_call(tool_db_id, {"error": error_message}, False)
                         logger.error("Tool %s failed: %s", tool_name, e)
                 else:
                     logger.info("Server-side tool call received: %s with payload: %s", tool_name, payload)
@@ -171,7 +170,7 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
                     except Exception as e:
                         error_message = f"Error executing tool {tool_name} in review: {str(e)}"
                         llm.add_message("review", error_message, role="tool_result")
-                        dbTools.complete_tool_call(tool_db_id, error_message, False)
+                        dbTools.complete_tool_call(tool_db_id, {"error": error_message}, False)
                         logger.error("Tool %s failed in review: %s", tool_name, e)
                 else:
                     logger.info("Server-side tool call received in review: %s with payload: %s", tool_name, payload)
