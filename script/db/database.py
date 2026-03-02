@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import Base
+from ..utils.json_utils import dumps_json
 
 
 class DatabaseManager:
@@ -28,6 +29,7 @@ class DatabaseManager:
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=10,
+            json_serializer=dumps_json,
         )
         self.SessionLocal = sessionmaker(
             bind=self.engine,

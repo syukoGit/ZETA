@@ -47,7 +47,7 @@ class Message(Base):
     run_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
     role: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    raw_content: Mapped[Optional[JSONB]] = mapped_column(JSONB, nullable=True)
+    raw_content: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     sequence_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, default=utc_now)
 

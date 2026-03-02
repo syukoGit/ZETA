@@ -1,4 +1,3 @@
-import json
 from typing import Any, Optional, List
 from uuid import UUID
 
@@ -7,17 +6,7 @@ from sqlalchemy.orm import Session
 from ..models import Message
 from ..time_utils import utc_now
 from .base_repository import BaseRepository
-
-
-def _to_json_serializable(value: Any) -> Any:
-    """Normalize a value to JSON-compatible primitives, falling back to str."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    try:
-        json.dumps(value)
-        return value
-    except (TypeError, ValueError):
-        return str(value)
+from ...utils.json_utils import to_json_compatible
 
 
 class MessageRepository(BaseRepository[Message]):
@@ -61,7 +50,7 @@ class MessageRepository(BaseRepository[Message]):
             run_id=run_id,
             role=role,
             content=content,
-            raw_content=_to_json_serializable(raw_content),
+            raw_content=to_json_compatible(raw_content),
             sequence_index=sequence_index,
             created_at=utc_now(),
         )
