@@ -40,13 +40,22 @@ ZETA is not a simple assistant that suggests trades — it **executes them itsel
 | `script/llm/llm_call.py` | Orchestrates both run and review calls, including tool loop and structured close tools |
 | `script/llm/llm_provider.py` | LLM provider abstraction (abstract `LLM` class + factory with dynamic loading) |
 | `script/llm/providers/grok_provider.py` | Grok (xAI) provider implementation with streaming, tool calling, and built-in web/X search |
-| `script/llm/start_prompt.py` | Complete system prompt defining ZETA's run behavior (trading rules, risk management, close requirements) |
-| `script/llm/review_prompt.py` | Dedicated prompt for strategic portfolio/run review mode |
+| `script/llm/start_prompt.py` | Loader exposing `DEFAULT_START_PROMPT` from local file `prompts/start_prompt.txt` (git-ignored) |
+| `script/llm/review_prompt.py` | Loader exposing `REVIEW_PROMPT` from local file `prompts/review_prompt.txt` (git-ignored) |
 | `script/llm/tools/` | Auto-discovered tool registry that the LLM can call |
 | `script/ibkr/ibTools.py` | Interactive Brokers connection singleton via `ib_async` |
 | `script/db/` | Database layer (SQLAlchemy + pgvector): models, sessions, repositories |
 | `script/config.py` | JSON configuration file loading with hot-reload |
 | `script/utils/timing.py` | Market-calendar-aware wait time calculation between iterations |
+
+### Local prompts (not versioned)
+
+Create these local files on your machine:
+
+- `prompts/start_prompt.txt`
+- `prompts/review_prompt.txt`
+
+Both are intentionally git-ignored. At runtime, `script/llm/start_prompt.py` and `script/llm/review_prompt.py` load those files and expose the same constants used by the rest of the codebase.
 
 ---
 
