@@ -8,7 +8,7 @@ _START_PROMPT_FILE = _PROMPTS_DIR / "start_prompt.txt"
 
 def _load_start_prompt() -> str:
     try:
-        content = _START_PROMPT_FILE.read_text(encoding="utf-8").strip()
+        content = _START_PROMPT_FILE.read_text(encoding="utf-8")
         if content:
             return content
     except FileNotFoundError:

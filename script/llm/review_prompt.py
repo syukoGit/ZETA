@@ -8,7 +8,7 @@ _REVIEW_PROMPT_FILE = _PROMPTS_DIR / "review_prompt.txt"
 
 def _load_review_prompt() -> str:
     try:
-        content = _REVIEW_PROMPT_FILE.read_text(encoding="utf-8").strip()
+        content = _REVIEW_PROMPT_FILE.read_text(encoding="utf-8")
         if content:
             return content
     except FileNotFoundError:
