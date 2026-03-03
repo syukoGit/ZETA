@@ -56,7 +56,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
             loops_count += 1
             (response, tool_calls) = llm.get_response("run")
 
-            llm.add_message("run", response, role="assistant")
+            llm.add_message("run", dumps_json(response), role="assistant")
             message_id = dbTools.add_message(run_id, "assistant", response)
 
             logger.debug("Tool calls received: %d", len(tool_calls))
@@ -143,7 +143,7 @@ async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max
             loops_count += 1
             (response, tool_calls) = llm.get_response("review")
 
-            llm.add_message("review", response, role="assistant")
+            llm.add_message("review", dumps_json(response), role="assistant")
             message_id = dbTools.add_message(review_id, "assistant", response)
 
             logger.debug("Tool calls received in review: %d", len(tool_calls))
