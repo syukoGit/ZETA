@@ -176,17 +176,18 @@ ZETA automatically adapts its cadence based on context:
 
 `config.json` is a local runtime file and is not versioned.
 
-- It is loaded from the current working directory (same folder context as script launch).
+- It is loaded from the current working directory (`Path.cwd()` at runtime).
 - If missing at startup, ZETA auto-generates a default `config.json`.
 - Changes are hot-reloaded automatically (no restart required).
 - If the file exists but is invalid, ZETA fails fast with a clear error.
+- On load/reload, ZETA logs the resolved path (`Runtime config loaded/reloaded from ...`).
 
 The versioned schema is available in `config.schema.json`.
 
 ```json
 {
-  "debugPrint": true,
-  "dry_run": false,
+  "debugPrint": false,
+  "dry_run": true,
   "min_wait_seconds": 60,
   "default_wait_seconds": 600,
   "off_hours_wait_seconds": 3600,
@@ -201,7 +202,7 @@ The versioned schema is available in `config.schema.json`.
     },
     "every_n_trades": 5
   },
-  "embedding_model": "intfloat/e5-large-v2",
+  "embedding_model": "sentence-transformers/nli-bert-large",
   "ibkr": {
     "host": "127.0.0.1",
     "port": 7497,
@@ -302,6 +303,8 @@ python main.py
 ```
 
 With this command, runtime config is read/written in `script/config.json`.
+
+If you run ZETA from the repository root (for example `python script/main.py`), runtime config is read/written in `config.json` at repository root.
 
 ZETA will:
 
