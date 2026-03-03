@@ -9,6 +9,7 @@ from logger import get_logger
 from config import LLMConfig
 from llm.llm_provider import LLM, ChatMode, LLMFactory
 from llm.tools.base import get_tools
+from utils.json_utils import dumps_json
 
 logger = get_logger(__name__)
 
