@@ -1,4 +1,6 @@
 *.env
+/config.json
+/script/config.json
 
 __pycache__/
 venv/

@@ -172,7 +172,16 @@ ZETA automatically adapts its cadence based on context:
 
 ## Configuration
 
-### `config.json`
+### Runtime config (`config.json`)
+
+`config.json` is a local runtime file and is not versioned.
+
+- It is loaded from the current working directory (same folder context as script launch).
+- If missing at startup, ZETA auto-generates a default `config.json`.
+- Changes are hot-reloaded automatically (no restart required).
+- If the file exists but is invalid, ZETA fails fast with a clear error.
+
+The versioned schema is available in `config.schema.json`.
 
 ```json
 {
@@ -291,6 +300,8 @@ Make sure TWS or IB Gateway is running and configured to accept API connections 
 cd script
 python main.py
 ```
+
+With this command, runtime config is read/written in `script/config.json`.
 
 ZETA will:
 
