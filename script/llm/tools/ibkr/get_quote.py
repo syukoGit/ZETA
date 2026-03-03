@@ -59,7 +59,7 @@ async def _request_snapshot(
         return None
 
 
-@register_tool("get_quote", description="Retrieve market data quote for a given symbol. Uses automatic fallback across market data types if the requested type times out.", args_model=GetQuoteArgs)
+@register_tool("get_quote", description="Retrieve market data quote for a given stock symbol. Uses automatic fallback across market data types if the requested type times out.", args_model=GetQuoteArgs)
 async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
     a = GetQuoteArgs(**args)
 
