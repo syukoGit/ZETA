@@ -1,341 +1,489 @@
 """
-Interactive tool runner — execute any registered ZETA tool from the CLI.
+Interactive tool runner for manually executing one registered ZETA tool.
+
+Features:
+- Lists all registered tools (run + review).
+- Asks for tool parameters interactively.
+- Uses hybrid input strategy:
+  - guided prompts for simple scalar fields
+  - JSON input for complex fields (nested objects/lists)
+- Validates arguments with each tool's Pydantic schema.
+- Injects a test `message_id` automatically for memory/audit compatibility.
+- Adds an extra safety gate for live IBKR side-effect tools.
 
 Usage:
-    python test_tools/tool_runner.py
-
-Steps performed automatically:
-  1. Database connection + table creation
-  2. Embedding model loading + DBTools singleton init
-  3. IBKR connection (via ib_async)
-  4. Tool auto-discovery (import of all tool modules)
-
-Then an interactive menu lets you pick a tool, fill its arguments, and run it.
-A random run_id / message_id are created so DB logging does not crash.
+	python test_tools/tool_runner.py
+	python test_tools/tool_runner.py --tool get_quote
+	python test_tools/tool_runner.py --live
 """
 
+import argparse
 import asyncio
+import importlib
 import json
 import os
 import sys
-import uuid
-from typing import Any, Dict
+from types import UnionType
+from typing import Any, Dict, Optional, get_args, get_origin
 
-# ── Path setup ───────────────────────────────────────────────────────────
+from pydantic import BaseModel, ValidationError
+from pydantic_core import PydanticUndefined
+
+# Ensure the project root and script/ are on sys.path
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "script"))
 
-from utils.json_utils import dumps_json
-
 from dotenv import load_dotenv
+
+from utils.json_utils import dumps_json
 
 load_dotenv(os.path.join(_root, ".env"))
 
+
+def _bootstrap_module_aliases() -> None:
+	"""Expose legacy top-level `db.*` names as aliases to `script.db.*` modules.
+
+	This lets tools importing `db.*` work in `test_tools` context while keeping
+	the real package execution path under `script.db.*`.
+	"""
+	module_pairs = {
+		"db": "script.db",
+		"db.models": "script.db.models",
+		"db.time_utils": "script.db.time_utils",
+		"db.embedding_model": "script.db.embedding_model",
+		"db.database": "script.db.database",
+		"db.db_tools": "script.db.db_tools",
+		"db.repositories": "script.db.repositories",
+		"db.repositories.base_repository": "script.db.repositories.base_repository",
+		"db.repositories.memory_repository": "script.db.repositories.memory_repository",
+		"db.repositories.message_repository": "script.db.repositories.message_repository",
+		"db.repositories.run_repository": "script.db.repositories.run_repository",
+		"db.repositories.tool_call_repository": "script.db.repositories.tool_call_repository",
+	}
+
+	for alias, target in module_pairs.items():
+		if alias in sys.modules:
+			continue
+		sys.modules[alias] = importlib.import_module(target)
+
 # ── Colour helpers ───────────────────────────────────────────────────────
-GREEN  = "\033[92m"
-RED    = "\033[91m"
+GREEN = "\033[92m"
+RED = "\033[91m"
 YELLOW = "\033[93m"
-CYAN   = "\033[96m"
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
-DIM    = "\033[2m"
+CYAN = "\033[96m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
 
 
 def _ok(msg: str) -> None:
-    print(f"  {GREEN}✓ {msg}{RESET}")
+	print(f"  {GREEN}{msg}{RESET}")
 
 
 def _fail(msg: str) -> None:
-    print(f"  {RED}✗ {msg}{RESET}")
+	print(f"  {RED}{msg}{RESET}")
 
 
 def _info(msg: str) -> None:
-    print(f"  {CYAN}ℹ {msg}{RESET}")
+	print(f"  {CYAN}{msg}{RESET}")
+
+
+def _warn(msg: str) -> None:
+	print(f"  {YELLOW}{msg}{RESET}")
 
 
 def _header(title: str) -> None:
-    print(f"\n{BOLD}{YELLOW}{'═' * 55}")
-    print(f"  {title}")
-    print(f"{'═' * 55}{RESET}")
+	print(f"\n{BOLD}{YELLOW}{'═' * 58}")
+	print(f"  {title}")
+	print(f"{'═' * 58}{RESET}")
 
 
-# ── Initialisation helpers ───────────────────────────────────────────────
-
-def init_database():
-    """Initialise the database connection and create tables."""
-    from db.database import init_db
-
-    _header("Database")
-    try:
-        db = init_db()
-        db.create_tables()
-        _ok("Database connected and tables ready.")
-        return db
-    except Exception as exc:
-        _fail(f"Database init failed: {exc}")
-        raise
+def _prompt_yes_no(label: str, default: bool = False) -> bool:
+	suffix = "[Y/n]" if default else "[y/N]"
+	while True:
+		choice = input(f"  {YELLOW}{label} {suffix}: {RESET}").strip().lower()
+		if not choice:
+			return default
+		if choice in ("y", "yes"):
+			return True
+		if choice in ("n", "no"):
+			return False
+		_fail("Invalid input, expected yes/no.")
 
 
-def init_dbtools():
-    """Load the embedding model and create the DBTools singleton."""
-    from config import get as cfg_get
-    from db.db_tools import DBTools
-    from sentence_transformers import SentenceTransformer
-
-    _header("DBTools")
-    DBTools()
-    _ok(f"DBTools initialised.")
+def _unwrap_optional(annotation: Any) -> tuple[Any, bool]:
+	origin = get_origin(annotation)
+	if origin in (Optional, UnionType) or str(origin) in ("typing.Union", "types.UnionType"):
+		args = [a for a in get_args(annotation) if a is not type(None)]
+		if len(args) == 1:
+			return args[0], True
+	return annotation, False
 
 
-async def init_ibkr():
-    """Connect to IBKR TWS / Gateway."""
-    from config import get as cfg_get
-    from ibkr.ibTools import init_ib_connection
-
-    _header("IBKR connection")
-    dry_run = cfg_get("dry_run", True)
-    _info(f"dry_run = {dry_run}")
-    ib = await init_ib_connection(dry_run)
-    _ok("IBKR connected.")
-    return ib
-
-
-def discover_tools():
-    """Import all tool modules so TOOL_REGISTRY is populated."""
-    from llm.tools.base import get_tools
-    # get_tools() triggers _auto_import_tools via module init
-    tools = get_tools()
-    return tools
+def _is_list_of_simple(annotation: Any) -> bool:
+	origin = get_origin(annotation)
+	if origin is not list:
+		return False
+	args = get_args(annotation)
+	if not args:
+		return False
+	inner = args[0]
+	inner, _ = _unwrap_optional(inner)
+	return inner in (str, int, float, bool)
 
 
-# ── Argument helpers ─────────────────────────────────────────────────────
+def _is_complex_field(annotation: Any) -> bool:
+	annotation, _ = _unwrap_optional(annotation)
+	origin = get_origin(annotation)
 
-def _prompt_value(name: str, field_info: dict) -> Any:
-    """Prompt the user for a single argument value."""
-    field_type = field_info.get("type", "string")
-    description = field_info.get("description", "")
-    default = field_info.get("default")
-    enum_values = field_info.get("enum")
+	if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+		return True
 
-    # Build prompt string
-    prompt_parts = [f"  {CYAN}{name}{RESET}"]
-    if description:
-        prompt_parts.append(f" {DIM}({description}){RESET}")
-    if enum_values:
-        prompt_parts.append(f" [{', '.join(str(e) for e in enum_values)}]")
-    if default is not None:
-        prompt_parts.append(f" [{YELLOW}default: {default}{RESET}]")
-    prompt_parts.append(": ")
-    prompt_str = "".join(prompt_parts)
+	if _is_list_of_simple(annotation):
+		return False
 
-    raw = input(prompt_str).strip()
+	if origin in (list, dict, tuple, set):
+		return True
 
-    # Use default if empty
-    if raw == "" and default is not None:
-        return default
-    if raw == "" and "null" in str(field_info.get("anyOf", "")):
-        return None
-    if raw == "":
-        # Check if field is optional (anyOf with null)
-        any_of = field_info.get("anyOf", [])
-        for sub in any_of:
-            if sub.get("type") == "null":
-                return None
-
-    # Empty input for non-optional fields without default – return None
-    if raw == "":
-        return None
-
-    # Type coercion
-    if field_type == "integer":
-        return int(raw)
-    elif field_type == "number":
-        return float(raw)
-    elif field_type == "boolean":
-        return raw.lower() in ("true", "1", "yes", "y")
-    elif field_type == "array":
-        # Accept JSON array or comma-separated values
-        if raw.startswith("["):
-            return json.loads(raw)
-        return [v.strip() for v in raw.split(",") if v.strip()]
-    elif field_type == "object":
-        return json.loads(raw)
-
-    return raw
+	return False
 
 
-def _is_field_required(name: str, schema: dict) -> bool:
-    return name in schema.get("required", [])
+def _parse_bool(raw: str) -> bool:
+	val = raw.strip().lower()
+	if val in ("true", "t", "1", "yes", "y"):
+		return True
+	if val in ("false", "f", "0", "no", "n"):
+		return False
+	raise ValueError("Expected a boolean (true/false)")
 
 
-def _resolve_type(field_info: dict) -> dict:
-    """Resolve anyOf / allOf wrappers to get the actual type info."""
-    if "anyOf" in field_info:
-        # Pick first non-null type
-        for sub in field_info["anyOf"]:
-            if sub.get("type") != "null":
-                merged = {**field_info, **sub}
-                merged.pop("anyOf", None)
-                return merged
-    return field_info
+def _parse_simple_scalar(raw: str, annotation: Any) -> Any:
+	annotation, _ = _unwrap_optional(annotation)
+
+	origin = get_origin(annotation)
+	if str(origin) == "typing.Literal":
+		allowed = get_args(annotation)
+		if raw not in [str(v) for v in allowed]:
+			raise ValueError(f"Value must be one of: {', '.join(str(v) for v in allowed)}")
+		for candidate in allowed:
+			if str(candidate) == raw:
+				return candidate
+		return raw
+
+	if annotation is str:
+		return raw
+	if annotation is int:
+		return int(raw)
+	if annotation is float:
+		return float(raw)
+	if annotation is bool:
+		return _parse_bool(raw)
+
+	return raw
 
 
-def collect_args(schema: dict) -> Dict[str, Any]:
-    """Interactively collect arguments based on a Pydantic JSON schema."""
-    properties = schema.get("properties", {})
-    required = schema.get("required", [])
-
-    if not properties:
-        print(f"  {DIM}(no arguments){RESET}")
-        return {}
-
-    args: Dict[str, Any] = {}
-    print()
-
-    # Required arguments first
-    for name in required:
-        if name not in properties:
-            continue
-        field_info = _resolve_type(properties[name])
-        value = _prompt_value(name, field_info)
-        if value is not None and value != "":
-            args[name] = value
-
-    # Optional arguments
-    optional = [k for k in properties if k not in required]
-    if optional:
-        print(f"\n  {DIM}Optional arguments (press Enter to skip):{RESET}")
-        for name in optional:
-            field_info = _resolve_type(properties[name])
-            value = _prompt_value(name, field_info)
-            if value is not None and value != "":
-                args[name] = value
-
-    return args
+def _parse_list_of_simple(raw: str, annotation: Any) -> list[Any]:
+	args = get_args(annotation)
+	inner = args[0] if args else str
+	inner, _ = _unwrap_optional(inner)
+	if not raw.strip():
+		return []
+	parts = [p.strip() for p in raw.split(",") if p.strip()]
+	return [_parse_simple_scalar(p, inner) for p in parts]
 
 
-# ── Main interactive loop ────────────────────────────────────────────────
-
-async def interactive_loop(tools: dict):
-    """Main REPL: pick a tool → fill args → run → show result."""
-    from db.db_tools import DBTools
-
-    sorted_names = sorted(tools.keys())
-
-    while True:
-        _header("Available tools")
-        for idx, name in enumerate(sorted_names, 1):
-            desc = tools[name].description
-            # Truncate long descriptions
-            if len(desc) > 70:
-                desc = desc[:67] + "…"
-            print(f"  {BOLD}{idx:3d}{RESET}. {GREEN}{name}{RESET}  {DIM}{desc}{RESET}")
-        print(f"  {BOLD}  0{RESET}. {RED}Quit{RESET}")
-        print()
-
-        raw = input(f"{BOLD}Choose a tool (number or name): {RESET}").strip()
-        if raw in ("0", "q", "quit", "exit"):
-            break
-
-        # Resolve selection
-        selected_name: str | None = None
-        if raw.isdigit():
-            idx = int(raw)
-            if 1 <= idx <= len(sorted_names):
-                selected_name = sorted_names[idx - 1]
-        else:
-            if raw in tools:
-                selected_name = raw
-            else:
-                # Fuzzy: find tools containing the input
-                matches = [n for n in sorted_names if raw.lower() in n.lower()]
-                if len(matches) == 1:
-                    selected_name = matches[0]
-                elif matches:
-                    print(f"  {YELLOW}Ambiguous — did you mean one of: {', '.join(matches)}?{RESET}")
-                    continue
-
-        if selected_name is None:
-            _fail("Invalid selection.")
-            continue
-
-        tool_spec = tools[selected_name]
-        _header(f"Tool: {selected_name}")
-        print(f"  {tool_spec.description}\n")
-
-        # Show argument schema
-        schema = tool_spec.args_model.model_json_schema()
-        args = collect_args(schema)
-
-        # Inject random message_id for DB logging (memory tools need it)
-        dummy_message_id = uuid.uuid4()
-        args["message_id"] = dummy_message_id
-
-        print(f"\n  {DIM}message_id (auto): {dummy_message_id}{RESET}")
-        print(f"\n  {CYAN}Executing {selected_name}…{RESET}")
-
-        try:
-            result = await tool_spec.handler(args)
-            print(f"\n{GREEN}{'─' * 55}")
-            print(f"  Result:{RESET}")
-            print(dumps_json(result, indent=2))
-            print(f"{GREEN}{'─' * 55}{RESET}")
-        except Exception as exc:
-            _fail(f"Execution failed: {exc}")
-
-        print()
+def _format_default(field_info: Any) -> str:
+	if field_info.default is PydanticUndefined:
+		return ""
+	return f" default={field_info.default}"
 
 
-# ── Entry point ──────────────────────────────────────────────────────────
+def _collect_args_for_model(model: type[BaseModel]) -> Dict[str, Any]:
+	fields = model.model_fields
+	if not fields:
+		return {}
 
-async def main():
-    _header("ZETA Tool Runner")
+	while True:
+		collected: Dict[str, Any] = {}
+		print(f"\n  {BOLD}Provide tool parameters:{RESET}")
 
-    ib = None
-    try:
-        # 1. Database
-        init_database()
+		for field_name, field_info in fields.items():
+			required = field_info.is_required()
+			annotation = field_info.annotation
+			description = field_info.description or ""
+			default_txt = _format_default(field_info)
+			req_txt = "required" if required else "optional"
 
-        # 2. Embedding + DBTools
-        init_dbtools()
+			if description:
+				print(f"  {DIM}{field_name} ({req_txt}{default_txt}) — {description}{RESET}")
+			else:
+				print(f"  {DIM}{field_name} ({req_txt}{default_txt}){RESET}")
 
-        # 3. IBKR
-        ib = await init_ibkr()
+			while True:
+				try:
+					if _is_complex_field(annotation):
+						raw = input(
+							f"  {CYAN}{field_name}{RESET} as JSON"
+							f"{DIM} (empty to skip if optional){RESET}: "
+						).strip()
+						if not raw:
+							if required:
+								_fail("This field is required.")
+								continue
+							break
+						collected[field_name] = json.loads(raw)
+						break
 
-        # 4. Discover tools
-        _header("Tool discovery")
-        tools = discover_tools()
-        _ok(f"{len(tools)} tools discovered.")
+					if _is_list_of_simple(annotation):
+						raw = input(
+							f"  {CYAN}{field_name}{RESET} as comma-separated values"
+							f"{DIM} (empty to skip if optional){RESET}: "
+						).strip()
+						if not raw:
+							if required:
+								_fail("This field is required.")
+								continue
+							break
+						collected[field_name] = _parse_list_of_simple(raw, annotation)
+						break
 
-        # 5. Create a dummy run so tool-call DB logging works
-        from db.db_tools import DBTools
-        db_tools = DBTools.get_instance()
-        dummy_run_id = db_tools.start_run("test_tool_runner", "manual", "n/a")
-        dummy_message_id = db_tools.add_message(dummy_run_id, "system", "[tool_runner] interactive session")
-        _info(f"Dummy run_id:     {dummy_run_id}")
-        _info(f"Dummy message_id: {dummy_message_id}")
+					raw = input(
+						f"  {CYAN}{field_name}{RESET}"
+						f"{DIM} (empty to skip if optional){RESET}: "
+					).strip()
+					if not raw:
+						if required:
+							_fail("This field is required.")
+							continue
+						break
 
-        # 6. Interactive loop
-        await interactive_loop(tools)
+					collected[field_name] = _parse_simple_scalar(raw, annotation)
+					break
 
-        # Mark run as completed
-        db_tools.end_run(dummy_run_id, "completed")
+				except ValueError as exc:
+					_fail(str(exc))
+				except json.JSONDecodeError as exc:
+					_fail(f"Invalid JSON: {exc}")
 
-    except KeyboardInterrupt:
-        print(f"\n{YELLOW}Interrupted.{RESET}")
-    except Exception as exc:
-        _fail(f"Fatal: {exc}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        if ib and ib.isConnected():
-            _info("Disconnecting IBKR…")
-            ib.disconnect()
-        print(f"\n{DIM}Bye.{RESET}")
+		try:
+			model.model_validate(collected)
+			return collected
+		except ValidationError as exc:
+			_fail("Validation error:")
+			for err in exc.errors():
+				loc = ".".join(str(part) for part in err.get("loc", []))
+				msg = err.get("msg", "Invalid value")
+				print(f"    {RED}- {loc}: {msg}{RESET}")
+			if not _prompt_yes_no("Retry parameter entry?", default=True):
+				raise
+
+
+def _merge_tools(run_tools: Dict[str, Any], review_tools: Dict[str, Any]) -> Dict[str, Any]:
+	merged = dict(review_tools)
+	merged.update(run_tools)
+	return merged
+
+
+def _choose_tool_interactive(tools: Dict[str, Any], run_names: set[str], review_names: set[str]) -> Optional[str]:
+	tool_names = sorted(tools.keys())
+	if not tool_names:
+		return None
+
+	_header("Available Tools")
+	for idx, name in enumerate(tool_names):
+		tags = []
+		if name in run_names:
+			tags.append("run")
+		if name in review_names:
+			tags.append("review")
+		tag_txt = f" [{'/'.join(tags)}]" if tags else ""
+		desc = tools[name].description
+		print(f"  {BOLD}{idx:>2}{RESET}  {CYAN}{name}{RESET}{DIM}{tag_txt}{RESET} — {desc}")
+
+	while True:
+		choice = input(
+			f"\n{BOLD}{GREEN}tool> {RESET}"
+			f"Type index/name, or 'quit': "
+		).strip()
+		if not choice:
+			continue
+		if choice.lower() in ("q", "quit", "exit"):
+			return None
+
+		if choice.isdigit():
+			idx = int(choice)
+			if 0 <= idx < len(tool_names):
+				return tool_names[idx]
+			_fail(f"Index out of range (0..{len(tool_names) - 1}).")
+			continue
+
+		if choice in tools:
+			return choice
+
+		_fail("Unknown tool name.")
+
+
+async def _main() -> None:
+	parser = argparse.ArgumentParser(description="Interactive ZETA tool runner")
+	parser.add_argument("--tool", type=str, help="Tool name to preselect")
+	parser.add_argument("--dry-run", action="store_true", help="Force dry_run mode for IBKR connection")
+	parser.add_argument("--live", action="store_true", help="Force live mode for IBKR connection")
+	args = parser.parse_args()
+
+	_header("Tool Runner")
+
+	_bootstrap_module_aliases()
+
+	from config import get as config_get
+	from db.database import init_db
+	from db.db_tools import DBTools
+	from ibkr.ibTools import init_ib_connection
+	from llm.tools.base import get_tools
+
+	# Runtime config
+	dry_run = config_get("dry_run", True)
+	if args.dry_run and args.live:
+		_fail("Use either --dry-run or --live, not both.")
+		return
+	if args.dry_run:
+		dry_run = True
+	if args.live:
+		dry_run = False
+
+	# ── Initialize DB + test message context ──
+	_info("Initializing database...")
+	try:
+		db = init_db()
+		db.create_tables()
+		db_tools = DBTools()
+		_ok("Database ready.")
+	except Exception as exc:
+		_fail(f"Database init failed: {exc}")
+		return
+
+	try:
+		run_id = db_tools.start_run("tool_runner", "manual", "n/a")
+		message_id = str(db_tools.add_message(run_id, "system", "tool_runner interactive session"))
+		_ok(f"Test run created (message_id={message_id}).")
+	except Exception as exc:
+		_fail(f"Could not create test run/message: {exc}")
+		return
+
+	# ── Load tools (run + review) ──
+	run_tools = get_tools("run")
+	review_tools = get_tools("review")
+	all_tools = _merge_tools(run_tools, review_tools)
+
+	if not all_tools:
+		_fail("No tools found in registry.")
+		return
+
+	_ok(f"Loaded {len(all_tools)} tool(s): {len(run_tools)} run + {len(review_tools)} review")
+
+	ib_tools = {
+		"get_cash_balance",
+		"preview_order",
+		"place_order",
+		"modify_order",
+		"get_volatility_metrics",
+		"get_trade_history",
+		"get_quote",
+		"get_positions",
+		"get_pnl",
+		"get_open_trades",
+		"get_history",
+		"cancel_order",
+	}
+	side_effect_ib_tools = {"place_order", "modify_order", "cancel_order"}
+
+	ib_ready = False
+
+	while True:
+		if args.tool:
+			tool_name = args.tool
+			args.tool = None
+			if tool_name not in all_tools:
+				_fail(f"Unknown tool: {tool_name}")
+				_info("Switching to interactive selection.")
+				tool_name = _choose_tool_interactive(all_tools, set(run_tools.keys()), set(review_tools.keys()))
+		else:
+			tool_name = _choose_tool_interactive(all_tools, set(run_tools.keys()), set(review_tools.keys()))
+
+		if not tool_name:
+			break
+
+		spec = all_tools[tool_name]
+		_header(f"Execute: {tool_name}")
+		_info(spec.description)
+
+		# Lazy IB connection only when required
+		if tool_name in ib_tools and not ib_ready:
+			_info(f"Connecting to IBKR (dry_run={dry_run})...")
+			try:
+				await init_ib_connection(dry_run)
+				ib_ready = True
+				_ok("IBKR connected.")
+			except Exception as exc:
+				_fail(f"IBKR connection failed: {exc}")
+				_info("Skipping this tool execution.")
+				if not _prompt_yes_no("Pick another tool?", default=True):
+					break
+				continue
+
+		# Safety gate for side effects in live mode
+		if tool_name in side_effect_ib_tools and not dry_run:
+			_warn("LIVE mode detected for IBKR side-effect tool.")
+			if not _prompt_yes_no("Confirm you want to continue in LIVE mode", default=False):
+				_info("Execution cancelled.")
+				continue
+			typed = input(f"  {YELLOW}Type exact tool name to confirm ({tool_name}): {RESET}").strip()
+			if typed != tool_name:
+				_fail("Confirmation failed. Execution cancelled.")
+				continue
+
+		# Collect and validate arguments
+		try:
+			raw_args = _collect_args_for_model(spec.args_model)
+		except ValidationError:
+			_info("Execution cancelled after validation failure.")
+			continue
+
+		# Validate once more and build handler payload
+		try:
+			validated = spec.args_model.model_validate(raw_args).model_dump()
+		except ValidationError as exc:
+			_fail(f"Validation failed unexpectedly: {exc}")
+			continue
+
+		handler_args = dict(validated)
+		handler_args["message_id"] = message_id
+
+		print(f"\n  {BOLD}Final arguments:{RESET}")
+		print(f"  {DIM}{dumps_json(handler_args, indent=2)}{RESET}")
+
+		if not _prompt_yes_no("Execute this tool call", default=True):
+			_info("Cancelled.")
+			continue
+
+		_info("Running tool...")
+		try:
+			result = await spec.handler(handler_args)
+			_ok("Tool executed successfully.")
+			print(f"\n  {BOLD}Result:{RESET}")
+			print(f"  {dumps_json(result, indent=2)}")
+		except Exception as exc:
+			_fail(f"Tool execution failed: {exc}")
+
+		if not _prompt_yes_no("Run another tool", default=True):
+			break
+
+	print(f"\n{BOLD}{YELLOW}Goodbye.{RESET}")
+
+
+def main() -> None:
+	asyncio.run(_main())
 
 
 if __name__ == "__main__":
-    import nest_asyncio
-    nest_asyncio.apply()
-    asyncio.run(main())
+	main()
