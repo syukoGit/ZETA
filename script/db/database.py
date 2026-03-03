@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import Base
-from ..utils.json_utils import dumps_json
+from utils.json_utils import dumps_json
 
 
 class DatabaseManager:

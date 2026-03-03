@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..models import Message
 from ..time_utils import utc_now
 from .base_repository import BaseRepository
-from ...utils.json_utils import to_json_compatible
+from utils.json_utils import to_json_compatible
 
 
 class MessageRepository(BaseRepository[Message]):

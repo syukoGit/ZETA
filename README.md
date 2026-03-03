@@ -172,12 +172,22 @@ ZETA automatically adapts its cadence based on context:
 
 ## Configuration
 
-### `config.json`
+### Runtime config (`config.json`)
+
+`config.json` is a local runtime file and is not versioned.
+
+- It is loaded from the current working directory (`Path.cwd()` at runtime).
+- If missing at startup, ZETA auto-generates a default `config.json`.
+- Changes are hot-reloaded automatically (no restart required).
+- If the file exists but is invalid, ZETA fails fast with a clear error.
+- On load/reload, ZETA logs the resolved path (`Runtime config loaded/reloaded from ...`).
+
+The versioned schema is available in `config.schema.json`.
 
 ```json
 {
-  "debugPrint": true,
-  "dry_run": false,
+  "debugPrint": false,
+  "dry_run": true,
   "min_wait_seconds": 60,
   "default_wait_seconds": 600,
   "off_hours_wait_seconds": 3600,
@@ -192,11 +202,14 @@ ZETA automatically adapts its cadence based on context:
     },
     "every_n_trades": 5
   },
-  "embedding_model": "intfloat/e5-large-v2",
+  "embedding_model": "sentence-transformers/nli-bert-large",
   "ibkr": {
     "host": "127.0.0.1",
     "port": 7497,
-    "clientId": 0
+    "clientId": 0,
+    "min_cash_reserve": 0,
+    "cash_reserve_currency": "BASE",
+    "excluded_cash_currencies": []
   }
 }
 ```
@@ -212,7 +225,9 @@ ZETA automatically adapts its cadence based on context:
 | `llm.model` | Specific LLM model |
 | `review.*` | Settings for periodic strategic review loop |
 | `embedding_model` | Embedding model for vector memory |
-| `ibkr.*` | IBKR connection settings (`host`, `port`, `clientId`) |
+| `ibkr.*` | IBKR settings (`host`, `port`, `clientId`, `min_cash_reserve`, `cash_reserve_currency`, `excluded_cash_currencies`) |
+
+When `get_cash_balance` is called, ZETA first excludes currencies listed in `ibkr.excluded_cash_currencies`, then subtracts `ibkr.min_cash_reserve` from the `CashBalance` of `ibkr.cash_reserve_currency` only, and clamps the result to `0`.
 
 ### Environment Variables
 
@@ -286,6 +301,10 @@ Make sure TWS or IB Gateway is running and configured to accept API connections 
 cd script
 python main.py
 ```
+
+With this command, runtime config is read/written in `script/config.json`.
+
+If you run ZETA from the repository root (for example `python script/main.py`), runtime config is read/written in `config.json` at repository root.
 
 ZETA will:
 

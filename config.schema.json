@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zeta.local/config.schema.json",
+  "title": "ZETA Runtime Configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "debugPrint",
+    "dry_run",
+    "min_wait_seconds",
+    "default_wait_seconds",
+    "off_hours_wait_seconds",
+    "llm",
+    "review",
+    "embedding_model",
+    "ibkr"
+  ],
+  "properties": {
+    "debugPrint": {
+      "type": "boolean"
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "min_wait_seconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "default_wait_seconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "off_hours_wait_seconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "llm": {
+      "type": "object",
+      "required": [
+        "provider",
+        "model"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": [
+        "llm",
+        "every_n_trades"
+      ],
+      "properties": {
+        "llm": {
+          "type": "object",
+          "required": [
+            "provider",
+            "model"
+          ],
+          "properties": {
+            "provider": {
+              "type": "string",
+              "minLength": 1
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "every_n_trades": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "embedding_model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ibkr": {
+      "type": "object",
+      "required": [
+        "host",
+        "port",
+        "clientId",
+        "min_cash_reserve",
+        "cash_reserve_currency",
+        "excluded_cash_currencies"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "clientId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_cash_reserve": {
+          "type": "number"
+        },
+        "cash_reserve_currency": {
+          "type": "string",
+          "minLength": 1
+        },
+        "excluded_cash_currencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
