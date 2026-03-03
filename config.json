@@ -19,6 +19,9 @@
     "ibkr": {
         "host": "127.0.0.1",
         "port": 7497,
-        "clientId": 0
+        "clientId": 0,
+        "min_cash_reserve": 0,
+        "cash_reserve_currency": "BASE",
+        "excluded_cash_currencies": []
     }
 }

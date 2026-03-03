@@ -196,7 +196,10 @@ ZETA automatically adapts its cadence based on context:
   "ibkr": {
     "host": "127.0.0.1",
     "port": 7497,
-    "clientId": 0
+    "clientId": 0,
+    "min_cash_reserve": 0,
+    "cash_reserve_currency": "BASE",
+    "excluded_cash_currencies": []
   }
 }
 ```
@@ -212,7 +215,9 @@ ZETA automatically adapts its cadence based on context:
 | `llm.model` | Specific LLM model |
 | `review.*` | Settings for periodic strategic review loop |
 | `embedding_model` | Embedding model for vector memory |
-| `ibkr.*` | IBKR connection settings (`host`, `port`, `clientId`) |
+| `ibkr.*` | IBKR settings (`host`, `port`, `clientId`, `min_cash_reserve`, `cash_reserve_currency`, `excluded_cash_currencies`) |
+
+When `get_cash_balance` is called, ZETA first excludes currencies listed in `ibkr.excluded_cash_currencies`, then subtracts `ibkr.min_cash_reserve` from the `CashBalance` of `ibkr.cash_reserve_currency` only, and clamps the result to `0`.
 
 ### Environment Variables
 
