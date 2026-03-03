@@ -25,13 +25,15 @@ class EmbeddingModel:
     def embed_passage(cls, text: str):
         return cls.get_instance().encode(
             f"passage: {text}",
-            normalize_embeddings=True
+            normalize_embeddings=True,
+            show_progress_bar=False
         ).tolist()
 
     @classmethod
     def embed_query(cls, text: str):
         return cls.get_instance().encode(
             f"query: {text}",
-            normalize_embeddings=True
+            normalize_embeddings=True,
+            show_progress_bar=False
         ).tolist()
     
