@@ -2,17 +2,17 @@ import asyncio
 from typing import Optional
 from ib_async import IB
 from logger import get_logger
-from config import get
+from config import config
 
 logger = get_logger(__name__)
 
 async def init_ib_connection(dry_run: bool = True) -> IB:
     ib = IB()
 
-    ibkr_config = get("ibkr")
-    host = ibkr_config.get("host", "127.0.0.1")
-    port = ibkr_config.get("port", 7497)
-    client_id = ibkr_config.get("clientId", 0)
+    ibkr = config().ibkr
+    host = ibkr.host
+    port = ibkr.port
+    client_id = ibkr.client_id
 
     logger.info("Connecting to IB TWS (%s:%d, clientId=%d)...", host, port, client_id)
     await ib.connectAsync(host, port, clientId=client_id)

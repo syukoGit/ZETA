@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from config import get as config_get
+from config import config
 from ibkr.ibTools import IBTools
 from llm.tools.base import register_tool
 
@@ -9,25 +9,10 @@ from llm.tools.base import register_tool
 async def get_cash_balance(_: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
 
-    ibkr_cfg = config_get("ibkr", {}) or {}
-
-    reserve_currency = str(ibkr_cfg.get("cash_reserve_currency", "BASE")).strip().upper() or "BASE"
-
-    excluded_currencies_raw = ibkr_cfg.get("excluded_cash_currencies", []) or []
-    if not isinstance(excluded_currencies_raw, list):
-        excluded_currencies_raw = [excluded_currencies_raw]
-        
-    excluded_currencies = {
-        str(currency).strip().upper()
-        for currency in excluded_currencies_raw
-        if str(currency).strip()
-    }
-
-    try:
-        min_cash_reserve = float(ibkr_cfg.get("min_cash_reserve", 0) or 0)
-    except (TypeError, ValueError):
-        min_cash_reserve = 0.0
-    min_cash_reserve = max(0.0, min_cash_reserve)
+    ibkr = config().ibkr
+    reserve_currency = ibkr.cash_reserve_currency.strip().upper() or "BASE"
+    excluded_currencies = {c.strip().upper() for c in ibkr.excluded_cash_currencies if c.strip()}
+    min_cash_reserve = max(0.0, ibkr.min_cash_reserve)
 
     async with ibTools.ib_sem:
         account_values = await ibTools.ib.accountSummaryAsync()

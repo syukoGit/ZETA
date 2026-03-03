@@ -2,7 +2,7 @@ import asyncio
 import sys
 from datetime import datetime, timezone
 
-from config import get
+from config import config
 from logger import get_logger
 from utils.market_status import parse_market_snapshot
 
@@ -10,10 +10,10 @@ logger = get_logger(__name__)
 
 
 def _off_hours_wait() -> int:
-    return get("off_hours_wait_seconds", 3600)
+    return config().off_hours_wait_seconds
 
 def _min_wait() -> int:
-    return get("min_wait_seconds", 60)
+    return config().min_wait_seconds
 
 
 def is_trading_hours(now: datetime = None) -> bool:

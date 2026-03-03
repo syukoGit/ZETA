@@ -335,14 +335,14 @@ async def _main() -> None:
 
 	_bootstrap_module_aliases()
 
-	from config import get as config_get
+	from config import config
 	from db.database import init_db
 	from db.db_tools import DBTools
 	from ibkr.ibTools import init_ib_connection
 	from llm.tools.base import get_tools
 
 	# Runtime config
-	dry_run = config_get("dry_run", True)
+	dry_run = config().dry_run
 	if args.dry_run and args.live:
 		_fail("Use either --dry-run or --live, not both.")
 		return

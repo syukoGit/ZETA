@@ -101,14 +101,14 @@ async def _chat_with_grok() -> None:
     """Interactive chat loop with Grok, including tool-call confirmation."""
     _header("Interactive Grok Chat")
 
-    from config import get as config_get
+    from config import config
     from db.database import init_db
     from db.db_tools import DBTools
     from ibkr.ibTools import init_ib_connection
     from llm.tools.base import get_tools
 
-    llm_cfg = config_get("llm", {})
-    model = llm_cfg.get("model")
+    llm_cfg = config().llm
+    model = llm_cfg.model
     api_key = os.getenv("LLM_API_KEY")
 
     if not api_key:
@@ -130,7 +130,7 @@ async def _chat_with_grok() -> None:
         return
 
     # ── Initialize IBKR ──
-    dry_run = config_get("dry_run", True)
+    dry_run = config().dry_run
     _info(f"Connecting to IBKR (dry_run={dry_run})...")
     try:
         await init_ib_connection(dry_run)

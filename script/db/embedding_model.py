@@ -2,7 +2,7 @@ from typing import Optional
 
 from sentence_transformers import SentenceTransformer
 
-from config import get
+from config import config
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,7 +13,7 @@ class EmbeddingModel:
     @classmethod
     def get_instance(cls) -> SentenceTransformer:
         if cls._instance is None:
-            embedding_model_name = get("embedding_model", "sentence-transformers/intfloat/e5-large-v2")
+            embedding_model_name = config().embedding_model
             logger.info(f"Loading embedding model: {embedding_model_name}...") 
 
             cls._instance = SentenceTransformer(embedding_model_name)

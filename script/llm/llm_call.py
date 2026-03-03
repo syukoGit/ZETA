@@ -1,5 +1,5 @@
 from typing import Any, Dict, Tuple
-from config import get
+from config import config
 from db.db_tools import DBTools
 from llm.review_prompt import REVIEW_PROMPT
 from llm.tools.history.get_runs_to_review import get_runs_to_review
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_review: str | None, max_loops: int = 20) -> Tuple[Dict, float]:
-    llm = LLMFactory.get_provider(get("llm"))
+    llm = LLMFactory.get_provider(config().llm)
     logger.info("Using LLM provider: %s with model %s", llm.name, llm.model)
 
     run_id = None
@@ -103,7 +103,7 @@ async def run_llm_call(dbTools: DBTools, previous_reporting: str | None, last_re
         return None, None
 
 async def run_llm_review_call(dbTools: DBTools, previous_review: str | None, max_loops: int = 20) -> Dict:
-    llm = LLMFactory.get_provider(get("review").get("llm"))
+    llm = LLMFactory.get_provider(config().review.llm)
     logger.info("Using LLM provider for review: %s with model %s", llm.name, llm.model)
 
     review_id = None
