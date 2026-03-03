@@ -1,4 +1,6 @@
 *.env
+*.tmp
+
 /config.json
 /script/config.json
 
