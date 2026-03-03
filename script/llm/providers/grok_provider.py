@@ -6,6 +6,7 @@ from xai_sdk.chat import tool, system, user, assistant, tool_result
 from xai_sdk.tools import web_search, x_search, get_tool_call_type
 from xai_sdk.proto.v6.chat_pb2 import ToolCall
 from logger import get_logger
+from config import LLMConfig
 from llm.llm_provider import LLM, ChatMode, LLMFactory
 from llm.tools.base import get_tools
 
@@ -14,7 +15,7 @@ logger = get_logger(__name__)
 class GrokProvider(LLM):
     _client = None
 
-    def __init__(self, config: dict):
+    def __init__(self, config: LLMConfig):
         super().__init__(config)
         self.client = Client(api_key=os.getenv("LLM_API_KEY"))
 

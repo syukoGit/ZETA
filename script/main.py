@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer
 from ibkr.ibTools import init_ib_connection
 from db.database import init_db
 from db.db_tools import DBTools
-from config import get
+from config import config
 from logger import setup_logging, get_logger
 from llm.llm_call import run_llm_call, run_llm_review_call
 from utils.market_status import get_market_status
@@ -37,21 +37,21 @@ async def main():
     dbTools = DBTools()
     logger.info("Database initialized and session started.")
 
-    dry_run = get("dry_run", True)
+    dry_run = config().dry_run
     if dry_run:
         logger.info("Running in dry-run mode. No real trades will be executed.")
 
     try:
         ib = await init_ib_connection(dry_run)
 
-        run_counter = get("review", {}).get("every_n_trades", 15)
+        run_counter = config().review.every_n_trades
         while True:
             if any(market_status.get("status") == "OPEN" for market_status in get_market_status(datetime.now(timezone.utc)).values()):
                 run_counter += 1
             else:
                 run_counter = 0  # Reset counter if markets are closed
             
-            if (run_counter >= get("review", {}).get("every_n_trades", 15)):
+            if (run_counter >= config().review.every_n_trades):
                 run_counter = 0
                 try:
                     logger.info("Running review... (%s)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
@@ -72,11 +72,11 @@ async def main():
                     (summary, time_before_next_run_s) = await run_llm_call(dbTools, previous_reporting, last_review_reporting)
                     
                     previous_reporting = summary
-                    time_before_next_run = time_before_next_run_s if time_before_next_run_s is not None else get("default_wait_seconds", 600)
+                    time_before_next_run = time_before_next_run_s if time_before_next_run_s is not None else config().default_wait_seconds
                 except Exception as e:
                     logger.error("Error during LLM call: %s", e)
                     previous_reporting = {}
-                    time_before_next_run = get("default_wait_seconds", 600)
+                    time_before_next_run = config().default_wait_seconds
                 
                 logger.info("Reporting (%s):", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
                 logger.debug("Reporting data: %s", previous_reporting)

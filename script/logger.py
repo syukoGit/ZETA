@@ -10,12 +10,12 @@ import sys
 
 import colorlog
 
-from config import get as config_get
+from config import config
 
 
 def setup_logging() -> None:
     """Configure root logging based on config.json."""
-    level = logging.DEBUG if config_get("debugPrint", False) else logging.INFO
+    level = logging.DEBUG if config().debug_print else logging.INFO
 
     root = logging.getLogger()
     root.setLevel(level)

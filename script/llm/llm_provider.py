@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import importlib
 from typing import Any, Literal
 from uuid import UUID
+from config import LLMConfig
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -12,9 +13,9 @@ class LLM(ABC):
     _chat_run = None
     _chat_review = None
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: LLMConfig):
         self.config = config
-        self.model = config.get("model")
+        self.model = config.model
     
     @property
     def name(self) -> str:
@@ -55,11 +56,11 @@ class LLMFactory:
         cls._providers[name] = provider
     
     @classmethod
-    def get_provider(cls, llm_config: Any | None) -> LLM:
+    def get_provider(cls, llm_config: LLMConfig | None) -> LLM:
         if llm_config is None:
             raise ValueError("Missing LLM configuration.")
-        
-        provider_name = llm_config.get("provider")
+
+        provider_name = llm_config.provider
         if not provider_name:
             raise ValueError("Missing LLM provider in configuration.")
         

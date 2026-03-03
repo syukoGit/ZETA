@@ -121,12 +121,12 @@ async def _test_ibkr_async() -> bool:
     _header("IBKR Connection Test")
 
     try:
-        from config import get as config_get
+        from config import config
 
-        ibkr_cfg = config_get("ibkr", {})
-        host = ibkr_cfg.get("host", "127.0.0.1")
-        port = ibkr_cfg.get("port", 7497)
-        client_id = ibkr_cfg.get("clientId", 0)
+        ibkr = config().ibkr
+        host = ibkr.host
+        port = ibkr.port
+        client_id = ibkr.client_id
     except Exception as exc:
         _fail(f"Could not read IBKR config: {exc}")
         return False
