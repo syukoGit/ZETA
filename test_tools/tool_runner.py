@@ -364,7 +364,7 @@ async def _main() -> None:
 
 	try:
 		run_id = db_tools.start_run("tool_runner", "manual", "n/a")
-		message_id = str(db_tools.add_message(run_id, "system", "tool_runner interactive session"))
+		message_id = db_tools.add_message(run_id, "system", "tool_runner interactive session")
 		_ok(f"Test run created (message_id={message_id}).")
 	except Exception as exc:
 		_fail(f"Could not create test run/message: {exc}")
