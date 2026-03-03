@@ -9,3 +9,6 @@ venv/
 
 /test_tools/exports/
 /test_tools/exports/*
+
+/prompts/
+/prompts/*
