@@ -3,6 +3,7 @@ from config import config
 from db.db_tools import DBTools
 from llm.review_prompt import REVIEW_PROMPT
 from llm.tools.history.get_runs_to_review import get_runs_to_review
+from llm.tools.ibkr.get_quote import get_quote
 from llm.tools.utils.get_date_hour_utc_and_markets import get_date_hour_utc_and_markets
 from logger import get_logger
 from llm.llm_provider import LLMFactory
@@ -197,10 +198,38 @@ async def get_snapshot_ib() -> Dict[str, Any]:
     open_trades = await get_open_trades({})
     market_status = await get_date_hour_utc_and_markets({})
 
+    quotes: Dict[str, Any] = {}
+    for idx in config().snapshot.indices:
+        try:
+            result = await get_quote({
+                "symbol": idx.symbol,
+                "sec_type": "IND",
+                "exchange": idx.exchange,
+                "currency": idx.currency,
+            })
+            if isinstance(result, dict):
+                quotes[idx.symbol] = result.get("last")
+            else:
+                logger.error(
+                    "get_quote for index %s returned non-dict result: %r",
+                    idx.symbol,
+                    result,
+                )
+                quotes[idx.symbol] = None
+        except Exception as e:
+            logger.error(
+                "Failed to fetch quote for index %s: %s",
+                idx.symbol,
+                e,
+                exc_info=True,
+            )
+            quotes[idx.symbol] = None
+
     return {
         "positions": positions["positions"],
         "cash_balances": cash_balance["cash_balances"],
         "open_trades": open_trades["open_trades"],
         "date_and_hour": market_status["date_and_hour"],
         "markets_status": market_status["markets"],
+        "quotes": quotes,
     }

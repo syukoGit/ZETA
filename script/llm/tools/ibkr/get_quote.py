@@ -2,10 +2,11 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ib_async import Stock, Ticker
+from ib_async import IB, Ticker
 from pydantic import BaseModel, Field
 
 from ibkr.ibTools import IBTools
+from ibkr.contracts import qualify_contract
 from ibkr.utils import clean_price, clean_size
 from llm.tools.base import register_tool
 from logger import get_logger
@@ -22,19 +23,26 @@ _FALLBACK_DATA_TYPES: Dict[int, List[int]] = {
 
 MIN_TIMEOUT_S = 14.0
 
+def _get_data_type_name(mdt: int) -> str:
+    return {
+        1: "REAL-TIME",
+        2: "FROZEN",
+        3: "DELAYED",
+        4: "DELAYED-FROZEN",
+    }.get(mdt, f"UNKNOWN({mdt})")
 
 class GetQuoteArgs(BaseModel):
     symbol: str = Field(..., min_length=1, description="Ticker")
+    sec_type: Optional[str] = Field(None, description="IB contract type: STK (stock/ETF) or IND (index). If omitted, auto-detection is attempted.")
     currency: str = Field("USD", min_length=1, description="Currency code")
-    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for IBKR to choose the best exchange")
-    primary_exchange: Optional[str] = Field(None, description="Optional primary exchange")
+    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for stocks. For indices, provide the listing exchange (e.g. CBOE for VIX).")
     timeout_s: float = Field(30.0, gt=MIN_TIMEOUT_S, description="Timeout for quote fetch (clamped to 15s minimum)")
     market_data_type: int = Field(1, description="IB market data type (1=real-time, 2=frozen, 3=delayed, 4=delayed-frozen). Default 3 (delayed) for reliability.")
     regulatory_snapshot: bool = Field(False)
 
 
 async def _request_snapshot(
-    ib, contract, timeout_s: float, regulatory_snapshot: bool
+    ib: IB, contract, timeout_s: float, regulatory_snapshot: bool
 ) -> Optional[Ticker]:
     """Request a single market-data snapshot with timeout. Returns Ticker or None."""
     try:
@@ -59,7 +67,7 @@ async def _request_snapshot(
         return None
 
 
-@register_tool("get_quote", description="Retrieve market data quote for a given stock symbol. Uses automatic fallback across market data types if the requested type times out.", args_model=GetQuoteArgs)
+@register_tool("get_quote", description="Retrieve market data quote for a given contract. Uses automatic fallback across market data types if the requested type times out.", args_model=GetQuoteArgs)
 async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
     a = GetQuoteArgs(**args)
 
@@ -69,18 +77,17 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
     ib = ibTools.ib
 
-    contract: Stock
-    if a.primary_exchange:
-        contract = Stock(a.symbol, a.exchange, a.currency, primaryExchange=a.primary_exchange)
-    else:
-        contract = Stock(a.symbol, a.exchange, a.currency)
 
     async with ibTools.ib_sem:
-        # --- Qualify contract (outside the retry loop, only needed once) ---
-        qualified = await ib.qualifyContractsAsync(contract)
-        if not qualified or qualified[0] is None:
-            raise ValueError(f"Could not qualify contract for symbol {a.symbol}")
-        q = qualified[0]
+        q, resolved_sec_type = await qualify_contract(
+            ib,
+            {
+                "symbol": a.symbol,
+                "sec_type": a.sec_type,
+                "exchange": a.exchange,
+                "currency": a.currency,
+            },
+        )
 
         # --- Build the ordered list of market_data_types to try ---
         types_to_try = [a.market_data_type] + _FALLBACK_DATA_TYPES.get(a.market_data_type, [])
@@ -96,7 +103,7 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
             ib.reqMarketDataType(mdt)
 
             try:
-                t = await _request_snapshot(ib, q, effective_timeout, a.regulatory_snapshot)
+                t = await _request_snapshot(ibTools.ib, q, effective_timeout, a.regulatory_snapshot)
             except Exception as e:
                 last_error = str(e)
                 logger.error("get_quote %s error with mdt=%d: %s", a.symbol, mdt, last_error)
@@ -111,8 +118,9 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
             return {
                 "status": "TIMEOUT",
                 "asOf": datetime.now(timezone.utc).isoformat(),
-                "symbol": a.symbol,
+                "symbol": getattr(q, "symbol", a.symbol),
                 "conId": getattr(q, "conId", None),
+                "secType": resolved_sec_type,
                 "timeout_s": effective_timeout,
                 "tried_data_types": types_to_try,
                 "last_error": last_error,
@@ -142,10 +150,11 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
             "asOf": datetime.now(timezone.utc).isoformat(),
             "symbol": q.symbol,
             "conId": getattr(q, "conId", None),
+            "secType": resolved_sec_type,
             "exchange": getattr(q, "exchange", a.exchange),
-            "primaryExchange": getattr(q, "primaryExchange", a.primary_exchange),
+            "primaryExchange": getattr(q, "primaryExchange", None),
             "currency": getattr(q, "currency", a.currency),
-            "marketDataType": used_data_type,
+            "marketDataType": _get_data_type_name(used_data_type) if used_data_type else None,
             "regulatorySnapshot": a.regulatory_snapshot,
             "bid": bid,
             "ask": ask,

@@ -17,7 +17,8 @@ ZETA is not a simple assistant that suggests trades — it **executes them itsel
 │                        Main Loop                        │
 │                        (main.py)                        │
 │                                                         │
-│  1. IBKR Snapshot (positions, cash, open orders)        │
+│  1. IBKR Snapshot (positions, cash, open orders,        │
+│     index quotes from config)                           │
 │  2. LLM run call with context + tools                  │
 │  3. Tool call execution (IBKR, memory, history, etc.)  │
 │  4. close_run returns summary + next wait               │
@@ -70,7 +71,7 @@ ZETA exposes a set of tools that the LLM can call autonomously during each itera
 | `get_positions` | Retrieves current portfolio positions |
 | `get_cash_balance` | Retrieves account cash balances |
 | `get_open_trades` | Lists open orders |
-| `get_quote` | Gets a real-time quote for a symbol |
+| `get_quote` | Gets a real-time or delayed quote for a symbol (stock or index). Supports automatic fallback across market data types (real-time → delayed → delayed-frozen) |
 | `get_history` | Retrieves historical market data (OHLCV bars) with configurable granularity |
 | `get_pnl` | Retrieves account P&L (Profit & Loss) |
 | `get_trade_history` | History of executed trades |
@@ -152,7 +153,7 @@ Run trigger types include:
 
 At each run, ZETA follows a structured process:
 
-1. **Read snapshot** — Positions, cash, open orders retrieved directly from IBKR
+1. **Read snapshot** — Positions, cash, open orders, and index quotes (configured via `snapshot.indices`) retrieved from IBKR and injected as `SNAPSHOT_IB`
 2. **Inject context** — System prompt + snapshot + previous iteration report
 3. **Time check** — Confirm market status via `get_date_hour_utc_and_markets`
 4. **Consult memory** — Semantic search if relevant to the current decision
@@ -219,6 +220,12 @@ The versioned schema is available in `config.schema.json`.
     "min_cash_reserve": 0,
     "cash_reserve_currency": "BASE",
     "excluded_cash_currencies": []
+  },
+  "snapshot": {
+    "indices": [
+      { "symbol": "VIX", "exchange": "CBOE" },
+      { "symbol": "SPX", "exchange": "CBOE" }
+    ]
   }
 }
 ```
@@ -235,6 +242,7 @@ The versioned schema is available in `config.schema.json`.
 | `review.*` | Settings for periodic strategic review loop |
 | `embedding_model` | Embedding model for vector memory |
 | `ibkr.*` | IBKR settings (`host`, `port`, `clientId`, `min_cash_reserve`, `cash_reserve_currency`, `excluded_cash_currencies`) |
+| `snapshot.indices` | List of indices to fetch and inject into the snapshot at the start of each run. Each entry requires `symbol` and `exchange` (e.g. `CBOE`); `currency` is optional and defaults to `USD`. The quoted `last` price for each index is included in `SNAPSHOT_IB` under `quotes`. |
 
 When `get_cash_balance` is called, ZETA first excludes currencies listed in `ibkr.excluded_cash_currencies`, then subtracts `ibkr.min_cash_reserve` from the `CashBalance` of `ibkr.cash_reserve_currency` only, and clamps the result to `0`.
 
