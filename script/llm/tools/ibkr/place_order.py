@@ -1,6 +1,6 @@
 from typing import Any, Dict, Literal, Optional
 
-from ib_async import LimitOrder, MarketOrder, Stock
+from ib_async import LimitOrder, MarketOrder
 from pydantic import BaseModel, Field, model_validator
 
 from ibkr.contracts import qualify_contract
