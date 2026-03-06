@@ -1,16 +1,16 @@
 from typing import Any, Dict, Optional
 
-from ib_async import Stock
 from pydantic import BaseModel, Field
 
 from ibkr.ibTools import IBTools
+from ibkr.contracts import qualify_contract
 from llm.tools.base import register_tool
 
 
 class GetHistoryArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
-    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for IBKR to choose the best exchange")
-    primary_exchange: Optional[str] = Field(None, min_length=1)
+    sec_type: Optional[str] = Field(None, description="IB contract type: STK (stock/ETF) or IND (index). If omitted, auto-detection is attempted.")
+    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for stocks. For indices, provide the listing exchange (e.g. CBOE for VIX).")
     currency: str = Field("USD", min_length=1)
     duration: str = Field("2 D", description='The amount of time to go back from the request\'s given end date and time', pattern="^([1-9][0-9]* (S|D|W|M|Y))+$")
     what_to_show: str = Field("TRADES", description='Type of data to show', pattern="^(TRADES|MIDPOINT|BID|ASK|BID_ASK|ADJUSTED_LAST|HISTORICAL_VOLATILITY|OPTION_IMPLIED_VOLATILITY)$")
@@ -25,22 +25,26 @@ async def get_history(args: Dict[str, Any]) -> Dict[str, Any]:
 
     ibTools = IBTools.get_instance()
 
-    contract: Stock
-    if (a.primary_exchange):
-        contract = Stock(a.symbol, a.exchange, a.currency, primaryExchange=a.primary_exchange)
-    else:
-        contract = Stock(a.symbol, a.exchange, a.currency)
-
     async with ibTools.ib_sem:
+        q, resolved_sec_type = await qualify_contract(
+            ibTools.ib,
+            {
+                "symbol": a.symbol,
+                "sec_type": a.sec_type,
+                "exchange": a.exchange,
+                "currency": a.currency,
+            },
+        )
+
         bars = await ibTools.ib.reqHistoricalDataAsync(
-            contract,
+            q,
             endDateTime="",
             durationStr=a.duration,
             barSizeSetting=a.bar_size,
-            whatToShow="TRADES",
+            whatToShow=a.what_to_show,
             useRTH=a.use_rth,
             formatDate=1,
-            keepUpToDate=False,
+            keepUpToDate=a.keepUpToDate,
         )
     
     out: list[Dict[str, Any]] = [{
@@ -48,4 +52,10 @@ async def get_history(args: Dict[str, Any]) -> Dict[str, Any]:
         "low": float(b.low), "close": float(b.close), "volume": float(b.volume)
     } for b in bars]
 
-    return {"symbol": contract.symbol, "exchange": contract.exchange, "bars": out}
+    return {
+        "symbol": getattr(q, "symbol", a.symbol),
+        "secType": resolved_sec_type,
+        "exchange": getattr(q, "exchange", a.exchange),
+        "currency": getattr(q, "currency", a.currency),
+        "bars": out,
+    }

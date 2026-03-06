@@ -3,6 +3,7 @@ from typing import Any, Dict, Literal, Optional
 from ib_async import LimitOrder, MarketOrder, Stock
 from pydantic import BaseModel, Field, model_validator
 
+from ibkr.contracts import qualify_contract
 from ibkr.ibTools import IBTools
 from llm.tools.base import register_tool
 from logger import get_logger
@@ -13,7 +14,6 @@ class PlaceOrderArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
     exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for IBKR to choose the best exchange")
     currency: str = Field("USD", min_length=1)
-    primary_exchange: Optional[str] = Field(None, min_length=1)
 
     side: Literal["BUY", "SELL"] = Field(..., description="Order side for the entry order")
     qty: float = Field(..., gt=0)
@@ -35,13 +35,20 @@ async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
     logger.info("Placing order: %s %s %s %s at %s", a.side, a.qty, a.symbol, a.exchange, a.limit_price if a.order_type == "LMT" else "MKT")
 
-    contract: Stock
-    if (a.primary_exchange):
-        contract = Stock(a.symbol, a.exchange, a.currency, primaryExchange=a.primary_exchange)
-    else:
-        contract = Stock(a.symbol, a.exchange, a.currency)
-
     async with ibTools.ib_sem:
+        q, resolved_sec_type = await qualify_contract(
+            ibTools.ib,
+            {
+                "symbol": a.symbol,
+                "exchange": a.exchange,
+                "currency": a.currency,
+                "sec_type": "STK",
+            }
+        )
+
+        if resolved_sec_type != "STK":
+            raise ValueError(f"Unsupported security type for trading: {resolved_sec_type}. Only STK is supported.")
+
         if a.order_type == "MKT":
             order = MarketOrder(a.side, a.qty)
         else:
@@ -50,25 +57,25 @@ async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
         if ibTools.dry_run:
             return {
                 "status": "DRY_RUN",
-                "symbol": contract.symbol,
-                "exchange": contract.exchange,
-                "currency": contract.currency,
+                "symbol": q.symbol,
+                "exchange": q.exchange,
+                "currency": q.currency,
                 "side": a.side,
                 "qty": a.qty,
                 "type": a.order_type,
                 "limitPrice": a.limit_price,
             }
         
-        trade = ibTools.ib.placeOrder(contract, order)
+        trade = ibTools.ib.placeOrder(q, order)
         
         return {
             "status": "SUBMITTED",
             "orderId": trade.order.orderId,
-            "symbol": contract.symbol,
-            "exchange": contract.exchange,
-            "currency": contract.currency,
-            "side": a.side,
-            "qty": a.qty,
-            "type": a.order_type,
-            "limitPrice": a.limit_price,
+            "symbol": trade.contract.symbol,
+            "exchange": trade.contract.exchange,
+            "currency": trade.contract.currency,
+            "side": trade.order.action,
+            "qty": trade.order.totalQuantity,
+            "type": trade.order.orderType,
+            "limitPrice": getattr(trade.order, "lmtPrice", None),
         }

@@ -2,19 +2,19 @@ from datetime import datetime, timezone
 import math
 from typing import Any, Dict, Literal, Optional
 
-from ib_async import Stock
 import numpy as np
 from pydantic import BaseModel, Field
 
 from ibkr.ibTools import IBTools
+from ibkr.contracts import qualify_contract
 from llm.tools.base import register_tool
 
 
 class GetVolatilityMetricsArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
-    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for IBKR to choose the best exchange")
+    sec_type: Optional[str] = Field(None, description="IB contract type: STK (stock/ETF) or IND (index). If omitted, auto-detection is attempted.")
+    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for stocks. For indices, provide the listing exchange (e.g. CBOE for VIX).")
     currency: str = Field("USD", min_length=1)
-    primary_exchange: Optional[str] = Field(None, min_length=1)
 
     lookback_days: int = Field(20, ge=5, le=252)
     use_rth: bool = Field(True)
@@ -23,25 +23,22 @@ class GetVolatilityMetricsArgs(BaseModel):
     duration: str = Field("30 D", description='The amount of time to go back from the request\'s given end date and time', pattern="^([1-9][0-9]* (S|D|W|M|Y))+$")
 
 
-@register_tool("get_volatility_metrics", description="Retrieve volatility metrics for a given symbol.", args_model=GetVolatilityMetricsArgs)
+@register_tool("get_volatility_metrics", description="Retrieve volatility metrics for a given contract.", args_model=GetVolatilityMetricsArgs)
 async def get_volatility_metrics(args: Dict[str, Any]) -> Dict[str, Any]:
     a = GetVolatilityMetricsArgs(**args)
 
     ibTools = IBTools.get_instance()
 
-    contract: Stock
-    if (a.primary_exchange):
-        contract = Stock(a.symbol, a.exchange, a.currency, primaryExchange=a.primary_exchange)
-    else:
-        contract = Stock(a.symbol, a.exchange, a.currency)
-
     async with ibTools.ib_sem:
-        qualified = await ibTools.ib.qualifyContractsAsync(contract)
-
-        if not qualified or qualified[0] is None:
-            raise ValueError(f"Could not qualify contract for symbol {a.symbol}")
-        
-        q = qualified[0]
+        q, resolved_sec_type = await qualify_contract(
+            ibTools.ib,
+            {
+                "symbol": a.symbol,
+                "sec_type": a.sec_type,
+                "exchange": a.exchange,
+                "currency": a.currency,
+            },
+        )
 
         bars = await ibTools.ib.reqHistoricalDataAsync(
             q,
@@ -82,7 +79,8 @@ async def get_volatility_metrics(args: Dict[str, Any]) -> Dict[str, Any]:
 
         return {
             "status": "OK",
-            "symbol": a.symbol,
+            "symbol": getattr(q, "symbol", a.symbol),
+            "secType": resolved_sec_type,
             "lookback_days": a.lookback_days,
             "atr": atr,
             "realized_vol": realized_vol,
