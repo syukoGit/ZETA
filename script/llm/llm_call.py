@@ -203,7 +203,7 @@ async def get_snapshot_ib() -> Dict[str, Any]:
         try:
             result = await get_quote({
                 "symbol": idx.symbol,
-                "secType": "IND",
+                "sec_type": "IND",
                 "exchange": idx.exchange,
                 "currency": idx.currency,
             })
