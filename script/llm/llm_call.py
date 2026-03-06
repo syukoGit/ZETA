@@ -200,13 +200,30 @@ async def get_snapshot_ib() -> Dict[str, Any]:
 
     quotes: Dict[str, Any] = {}
     for idx in config().snapshot.indices:
-        result = await get_quote({
-            "symbol": idx.symbol,
-            "secType": "IND",
-            "exchange": idx.exchange,
-            "currency": idx.currency,
-        })
-        quotes[idx.symbol] = result.get("last")
+        try:
+            result = await get_quote({
+                "symbol": idx.symbol,
+                "secType": "IND",
+                "exchange": idx.exchange,
+                "currency": idx.currency,
+            })
+            if isinstance(result, dict):
+                quotes[idx.symbol] = result.get("last")
+            else:
+                logger.error(
+                    "get_quote for index %s returned non-dict result: %r",
+                    idx.symbol,
+                    result,
+                )
+                quotes[idx.symbol] = None
+        except Exception as e:
+            logger.error(
+                "Failed to fetch quote for index %s: %s",
+                idx.symbol,
+                e,
+                exc_info=True,
+            )
+            quotes[idx.symbol] = None
 
     return {
         "positions": positions["positions"],
