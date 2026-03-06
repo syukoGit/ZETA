@@ -13,7 +13,8 @@
     "llm",
     "review",
     "embedding_model",
-    "ibkr"
+    "ibkr",
+    "snapshot"
   ],
   "properties": {
     "debugPrint": {
@@ -120,6 +121,39 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "required": [
+        "indices"
+      ],
+      "properties": {
+        "indices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "symbol",
+              "exchange"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "exchange": {
+                "type": "string",
+                "minLength": 1
+              },
+              "currency": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           }
         }
       }

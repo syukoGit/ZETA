@@ -1,9 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
-import json
 from dotenv import load_dotenv
 import nest_asyncio
-from sentence_transformers import SentenceTransformer
 from ibkr.ibTools import init_ib_connection
 from db.database import init_db
 from db.db_tools import DBTools
@@ -73,6 +71,8 @@ async def main():
                     
                     previous_reporting = summary
                     time_before_next_run = time_before_next_run_s if time_before_next_run_s is not None else config().default_wait_seconds
+
+                    logger.info("LLM call completed (%s). Summary: %s", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), previous_reporting)
                 except Exception as e:
                     logger.error("Error during LLM call: %s", e)
                     previous_reporting = {}

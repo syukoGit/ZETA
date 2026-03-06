@@ -98,6 +98,39 @@ class ReviewConfig:
 
 
 @dataclass(frozen=True)
+class SnapshotIndexConfig:
+    symbol: str
+    exchange: str
+    currency: str
+
+    @classmethod
+    def from_dict(cls, d: dict, path: str) -> "SnapshotIndexConfig":
+        symbol = _require_str(d, "symbol", path)
+        exchange = _require_str(d, "exchange", path)
+        currency = d.get("currency", "USD")
+        if not isinstance(currency, str) or not currency.strip():
+            raise ConfigError(f"Invalid config: '{_fk(path, 'currency')}' must be a non-empty string")
+        return cls(symbol=symbol, exchange=exchange, currency=currency)
+
+
+@dataclass(frozen=True)
+class SnapshotConfig:
+    indices: tuple["SnapshotIndexConfig", ...]
+
+    @classmethod
+    def from_dict(cls, d: dict, path: str = "snapshot") -> "SnapshotConfig":
+        raw = d.get("indices")
+        if not isinstance(raw, list):
+            raise ConfigError(f"Invalid config: '{_fk(path, 'indices')}' must be an array")
+        indices = tuple(
+            SnapshotIndexConfig.from_dict(item, path=f"{path}.indices[{i}]")
+            for i, item in enumerate(raw)
+            if isinstance(item, dict)
+        )
+        return cls(indices=indices)
+
+
+@dataclass(frozen=True)
 class IBKRConfig:
     host: str
     port: int
@@ -129,6 +162,7 @@ class AppConfig:
     llm: LLMConfig
     review: ReviewConfig
     ibkr: IBKRConfig
+    snapshot: SnapshotConfig
 
     @classmethod
     def from_dict(cls, d: dict) -> "AppConfig":
@@ -142,6 +176,7 @@ class AppConfig:
             llm=LLMConfig.from_dict(_require_dict(d, "llm", ""), path="llm"),
             review=ReviewConfig.from_dict(_require_dict(d, "review", "")),
             ibkr=IBKRConfig.from_dict(_require_dict(d, "ibkr", "")),
+            snapshot=SnapshotConfig.from_dict(_require_dict(d, "snapshot", "")),
         )
 
 _DEFAULT_CONFIG: dict = {
@@ -169,6 +204,9 @@ _DEFAULT_CONFIG: dict = {
         "min_cash_reserve": 0,
         "cash_reserve_currency": "BASE",
         "excluded_cash_currencies": [],
+    },
+    "snapshot": {
+        "indices": [],
     },
 }
 
