@@ -89,6 +89,9 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
             },
         )
 
+        if resolved_sec_type == "IND":
+            a.market_data_type = 3  # Force delayed for indices, as real-time is often unavailable
+
         # --- Build the ordered list of market_data_types to try ---
         types_to_try = [a.market_data_type] + _FALLBACK_DATA_TYPES.get(a.market_data_type, [])
 
