@@ -122,12 +122,12 @@ class SnapshotConfig:
         raw = d.get("indices")
         if not isinstance(raw, list):
             raise ConfigError(f"Invalid config: '{_fk(path, 'indices')}' must be an array")
-        indices = tuple(
-            SnapshotIndexConfig.from_dict(item, path=f"{path}.indices[{i}]")
-            for i, item in enumerate(raw)
-            if isinstance(item, dict)
-        )
-        return cls(indices=indices)
+        indices_list = []
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                raise ConfigError(f"Invalid config: '{path}.indices[{i}]' must be an object")
+            indices_list.append(SnapshotIndexConfig.from_dict(item, path=f"{path}.indices[{i}]"))
+        return cls(indices=tuple(indices_list))
 
 
 @dataclass(frozen=True)
