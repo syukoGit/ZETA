@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+from uuid import UUID
 
 from test_tools.tools_utils.display import fail, header, info, ok
 
@@ -63,7 +64,7 @@ def test_database() -> bool:
     return True
 
 
-def init_database() -> None:
+def init_database() -> UUID | None:
     header("Database Initialization")
 
     db_url = os.getenv("DATABASE_URL")
@@ -78,8 +79,26 @@ def init_database() -> None:
         db = DatabaseManager(db_url)
         Base.metadata.create_all(db.engine)
         ok("Database initialized successfully.")
+
     except Exception as exc:
         fail(f"Database initialization failed: {exc}")
+        return
+
+    try:
+        from db.db_tools import DBTools
+
+        db_tools = DBTools()
+
+        run_id = db_tools.start_run("tool_runner", "manual", "n/a")
+        message_id = db_tools.add_message(
+            run_id, "system", "tool_runner interactive session"
+        )
+        ok(f"Test run created (message_id={message_id}).")
+
+        return message_id
+    except Exception as exc:
+        fail(f"Could not create test run/message: {exc}")
+        return
 
 
 # IBKR test
