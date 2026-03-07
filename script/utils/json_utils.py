@@ -1,8 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
 import json
+import math
 from typing import Any, Mapping
 from uuid import UUID
+
+
+FLOAT_ROUND_DIGITS = 4
 
 
 def _to_json_key(key: Any) -> str:
@@ -21,8 +25,10 @@ def to_json_compatible(value: Any) -> Any:
 
     Unknown non-serializable objects are converted to str(value).
     """
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, (bool, int, str)):
         return value
+    if isinstance(value, float):
+        return round(value, FLOAT_ROUND_DIGITS) if math.isfinite(value) else None
     if isinstance(value, UUID):
         return str(value)
     if isinstance(value, datetime):
@@ -43,6 +49,6 @@ def to_json_compatible(value: Any) -> Any:
 
 def dumps_json(value: Any, **kwargs: Any) -> str:
     """Serialize using project JSON rules for DB JSON/JSONB columns."""
-    options = {"ensure_ascii": False}
+    options = {"ensure_ascii": False, "allow_nan": False}
     options.update(kwargs)
     return json.dumps(to_json_compatible(value), **options)

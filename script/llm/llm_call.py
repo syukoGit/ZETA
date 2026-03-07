@@ -217,12 +217,7 @@ async def get_snapshot_ib() -> Dict[str, Any]:
                 )
                 quotes[idx.symbol] = None
         except Exception as e:
-            logger.error(
-                "Failed to fetch quote for index %s: %s",
-                idx.symbol,
-                e,
-                exc_info=True,
-            )
+            logger.error("Failed to fetch quote for index %s: %s", idx.symbol, e)
             quotes[idx.symbol] = None
 
     return {

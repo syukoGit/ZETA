@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any, Tuple, Union
 from uuid import UUID
 
 from db.embedding_model import EmbeddingModel
+from utils.json_utils import to_json_compatible
 
 from .database import get_db
 from .models import MemoryAccessLog, MemoryEntry, Run
@@ -415,7 +416,7 @@ class DBTools:
                 title=title,
                 source=source,
                 tags=tags or [],
-                meta=meta,
+                meta=to_json_compatible(meta),
                 status=status,
                 embedding=embedding,
             )
@@ -494,7 +495,7 @@ class DBTools:
                 memory.embedding = embedding
 
             if meta is not None:
-                memory.meta = meta
+                memory.meta = to_json_compatible(meta)
 
             if status is not None:
                 memory.status = status

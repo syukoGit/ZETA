@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..models import ToolCall
 from ..time_utils import utc_now
 from .base_repository import BaseRepository
+from utils.json_utils import to_json_compatible
 
 
 class ToolCallRepository(BaseRepository[ToolCall]):
@@ -35,7 +36,7 @@ class ToolCallRepository(BaseRepository[ToolCall]):
         tool_call = ToolCall(
             message_id=message_id,
             tool_name=tool_name,
-            input_payload=input_payload,
+            input_payload=to_json_compatible(input_payload),
             status=status,
             executed_at=utc_now(),
         )
@@ -60,7 +61,7 @@ class ToolCallRepository(BaseRepository[ToolCall]):
         """
         tool_call = self.get_by_id(tool_call_id)
         if tool_call:
-            tool_call.output_payload = output_payload
+            tool_call.output_payload = to_json_compatible(output_payload)
             tool_call.status = status
             self.session.flush()
         return tool_call
