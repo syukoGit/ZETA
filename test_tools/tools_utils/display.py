@@ -1,7 +1,10 @@
 GREEN = "\033[92m"
 RED = "\033[91m"
+BLUE = "\033[94m"
 YELLOW = "\033[93m"
 CYAN = "\033[96m"
+MAGENTA = "\033[95m"
+
 RESET = "\033[0m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
@@ -27,6 +30,16 @@ def header(title: str) -> None:
     print(f"\n{BOLD}{YELLOW}{'═' * 50}")
     print(f"  {title}")
     print(f"{'═' * 50}{RESET}")
+
+
+def subheader(title: str, width: int = 56) -> None:
+    print(f"\n{BOLD}{CYAN}{'─' * width}")
+    print(f"  {title}")
+    print(f"{'─' * width}{RESET}")
+
+
+def separator(char: str = "·", width: int = 56, end: str | None = "\n") -> None:
+    print(f"  {DIM}{char * width}{RESET}", end=end)
 
 
 def prompt(label: str, choices: list[str] | None = None) -> str:
