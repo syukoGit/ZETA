@@ -1,4 +1,3 @@
-from db.db_tools import DBTools
 from tools_utils.init import init
 
 init()
@@ -11,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import subqueryload
 
+from db.db_tools import DBTools
 from db.models import Message, Run
 from db.database import DatabaseManager
 from test_tools.tools_utils.check_connections import init_database
