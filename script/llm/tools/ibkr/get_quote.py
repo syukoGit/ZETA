@@ -33,7 +33,6 @@ def _get_data_type_name(mdt: int) -> str:
 
 class GetQuoteArgs(BaseModel):
     symbol: str = Field(..., min_length=1, description="Ticker")
-    sec_type: Optional[str] = Field(None, description="IB contract type: STK (stock/ETF) or IND (index). If omitted, auto-detection is attempted.")
     currency: str = Field("USD", min_length=1, description="Currency code")
     exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for stocks. For indices, provide the listing exchange (e.g. CBOE for VIX).")
     timeout_s: float = Field(30.0, gt=MIN_TIMEOUT_S, description="Timeout for quote fetch (clamped to 15s minimum)")
@@ -83,7 +82,6 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
             ib,
             {
                 "symbol": a.symbol,
-                "sec_type": a.sec_type,
                 "exchange": a.exchange,
                 "currency": a.currency,
             },
