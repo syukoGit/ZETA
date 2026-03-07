@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, get_args, get_origin
 from pydantic import BaseModel, ValidationError
 from pydantic_core import PydanticUndefined
 
+from db.db_tools import DBTools
 from llm.tools.base import ToolSpec, get_tools
 from test_tools.tools_utils.check_connections import init_database, init_ibkr
 from test_tools.tools_utils.display import *
@@ -225,69 +226,74 @@ def _choose_tool_interactive(tools: Dict[str, ToolSpec]) -> Optional[str]:
 async def _main() -> None:
     header("Tool Runner")
 
-    message_id = init_database()
+    _, run_id, message_id = init_database("tool_runner")
 
     if message_id is None:
         return
 
     await init_ibkr()
 
-    # ── Load tools (run + review) ──
-    tools = get_tools("all")
+    try:
+        # ── Load tools (run + review) ──
+        tools = get_tools("all")
 
-    if not tools:
-        fail("No tools found in registry.")
-        return
+        if not tools:
+            fail("No tools found in registry.")
+            return
 
-    ok(f"Loaded {len(tools)} tool(s)")
+        ok(f"Loaded {len(tools)} tool(s)")
 
-    while True:
-        tool_name = _choose_tool_interactive(tools)
+        while True:
+            tool_name = _choose_tool_interactive(tools)
 
-        if not tool_name:
-            break
+            if not tool_name:
+                break
 
-        spec = tools[tool_name]
-        header(f"Execute: {tool_name}")
-        info(spec.description)
+            spec = tools[tool_name]
+            header(f"Execute: {tool_name}")
+            info(spec.description)
 
-        # Collect and validate arguments
-        try:
-            raw_args = _collect_args_for_model(spec.args_model)
-        except ValidationError:
-            info("Execution cancelled after validation failure.")
-            continue
+            # Collect and validate arguments
+            try:
+                raw_args = _collect_args_for_model(spec.args_model)
+            except ValidationError:
+                info("Execution cancelled after validation failure.")
+                continue
 
-        # Validate once more and build handler payload
-        try:
-            validated = spec.args_model.model_validate(raw_args).model_dump()
-        except ValidationError as exc:
-            fail(f"Validation failed unexpectedly: {exc}")
-            continue
+            # Validate once more and build handler payload
+            try:
+                validated = spec.args_model.model_validate(raw_args).model_dump()
+            except ValidationError as exc:
+                fail(f"Validation failed unexpectedly: {exc}")
+                continue
 
-        handler_args = dict(validated)
-        handler_args["message_id"] = message_id
+            handler_args = dict(validated)
+            handler_args["message_id"] = message_id
 
-        info(f"\n  {BOLD}Final arguments:")
-        message(f"  {DIM}{dumps_json(handler_args, indent=2)}")
+            info(f"\n  {BOLD}Final arguments:")
+            message(f"  {DIM}{dumps_json(handler_args, indent=2)}")
 
-        if not prompt_yes_no("\nExecute this tool call", default=True):
-            info("Cancelled.")
-            continue
+            if not prompt_yes_no("\nExecute this tool call", default=True):
+                info("Cancelled.")
+                continue
 
-        info("Running tool...")
-        try:
-            result = await spec.handler(handler_args)
-            ok("Tool executed successfully.")
-            info(f"\n  {BOLD}Result:")
-            message(f"  {DIM}{dumps_json(result, indent=2)}")
-        except Exception as exc:
-            fail(f"Tool execution failed: {exc}")
+            info("Running tool...")
+            try:
+                result = await spec.handler(handler_args)
+                ok("Tool executed successfully.")
+                info(f"\n  {BOLD}Result:")
+                message(f"  {DIM}{dumps_json(result, indent=2)}")
+            except Exception as exc:
+                fail(f"Tool execution failed: {exc}")
 
-        if not prompt_yes_no("\nRun another tool", default=True):
-            break
+            if not prompt_yes_no("\nRun another tool", default=True):
+                break
 
-    message(f"\n{BOLD}{YELLOW}Goodbye.")
+        message(f"\n{BOLD}{YELLOW}Goodbye.")
+    finally:
+        db_tools = DBTools()
+        if run_id is not None:
+            db_tools.end_run(run_id)
 
 
 if __name__ == "__main__":

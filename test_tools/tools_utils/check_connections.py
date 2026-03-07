@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+from typing import Any, Tuple
 from uuid import UUID
 
 from test_tools.tools_utils.display import fail, header, info, ok
@@ -64,22 +65,14 @@ def test_database() -> bool:
     return True
 
 
-def init_database() -> UUID | None:
+def init_database(trigger_type: str) -> Tuple[Any, UUID, UUID] | None:
     header("Database Initialization")
 
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        fail("DATABASE_URL environment variable is not set.")
-        return
-
     try:
-        from db.database import DatabaseManager
-        from db.models import Base
+        from db.database import init_db
 
-        db = DatabaseManager(db_url)
-        Base.metadata.create_all(db.engine)
+        db = init_db()
         ok("Database initialized successfully.")
-
     except Exception as exc:
         fail(f"Database initialization failed: {exc}")
         return
@@ -89,13 +82,13 @@ def init_database() -> UUID | None:
 
         db_tools = DBTools()
 
-        run_id = db_tools.start_run("tool_runner", "manual", "n/a")
+        run_id = db_tools.start_run(trigger_type, "manual", "n/a")
         message_id = db_tools.add_message(
-            run_id, "system", "tool_runner interactive session"
+            run_id, "system", f"{trigger_type} interactive session"
         )
-        ok(f"Test run created (message_id={message_id}).")
+        ok(f"Test run created (run_id={run_id}, message_id={message_id}).")
 
-        return message_id
+        return db, run_id, message_id
     except Exception as exc:
         fail(f"Could not create test run/message: {exc}")
         return
