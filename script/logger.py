@@ -1,16 +1,27 @@
-"""
-Centralized logging module.
-The log level is driven by the "debugPrint" key in config.json:
-  - True  → DEBUG (everything is displayed)
-  - False → INFO  (only important messages)
-"""
-
 import logging
+import re
 import sys
 
 import colorlog
 
 from config import config
+
+
+_IB_200_RE = re.compile(r"\bError\s+200\b", re.IGNORECASE)
+
+
+class _DropIB200UnknownContractFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "ib_async.wrapper":
+            return True
+        
+        msg = record.getMessage()
+        is_error_200 = bool(_IB_200_RE.search(msg))
+        is_unknown_contract = "Unknown contract" in msg
+
+        if is_error_200 and is_unknown_contract:
+            return False
+        return True
 
 
 def setup_logging() -> None:
@@ -26,6 +37,7 @@ def setup_logging() -> None:
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(level)
+    handler.addFilter(_DropIB200UnknownContractFilter())
     formatter = colorlog.ColoredFormatter(
         fmt="%(asctime)s %(log_color)s[%(levelname)s]%(reset)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
