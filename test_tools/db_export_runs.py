@@ -1,16 +1,10 @@
-"""
-Export ZETA PostgreSQL data into a structured JSON file for run analysis.
+from tools_utils.init import init
 
-Usage examples:
-    python test_tools/db_export_runs.py
-    python test_tools/db_export_runs.py --from 2026-01-01 --to 2026-02-22
-    python test_tools/db_export_runs.py --from 2026-02-01T00:00:00Z --output my_export.json
-"""
+init()
 
 import argparse
 import json
 import os
-import sys
 from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any
@@ -18,15 +12,7 @@ from uuid import UUID
 
 from sqlalchemy import inspect
 
-# Ensure the project root and script/ are on sys.path
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _root)
-sys.path.insert(0, os.path.join(_root, "script"))
-
-from dotenv import load_dotenv
-
-load_dotenv(os.path.join(_root, ".env"))
-
+from test_tools.tools_utils.display import *
 from db.database import init_db
 from db.models import MemoryAccessLog, MemoryEntry, Message, Run, ToolCall
 
@@ -112,18 +98,25 @@ def _build_run_analysis(
     for run in runs:
         run_messages = sorted(
             messages_by_run.get(run.id, []),
-            key=lambda msg: ((msg.sequence_index is None), msg.sequence_index if msg.sequence_index is not None else 10**9),
+            key=lambda msg: (
+                (msg.sequence_index is None),
+                msg.sequence_index if msg.sequence_index is not None else 10**9,
+            ),
         )
 
         message_entries: list[dict[str, Any]] = []
         for message in run_messages:
-            linked_tool_calls = [_row_to_dict(tc) for tc in tool_calls_by_message.get(message.id, [])]
+            linked_tool_calls = [
+                _row_to_dict(tc) for tc in tool_calls_by_message.get(message.id, [])
+            ]
 
             linked_memory_events: list[dict[str, Any]] = []
             for event in memory_logs_by_message.get(message.id, []):
                 event_payload = _row_to_dict(event)
                 memory_entry = memory_by_id.get(event.memory_id)
-                event_payload["memory_entry"] = _row_to_dict(memory_entry) if memory_entry else None
+                event_payload["memory_entry"] = (
+                    _row_to_dict(memory_entry) if memory_entry else None
+                )
                 linked_memory_events.append(event_payload)
 
             message_payload = _row_to_dict(message)
@@ -136,7 +129,9 @@ def _build_run_analysis(
         run_payload["counts"] = {
             "messages": len(message_entries),
             "tool_calls": sum(len(item["tool_calls"]) for item in message_entries),
-            "memory_access_events": sum(len(item["memory_access_events"]) for item in message_entries),
+            "memory_access_events": sum(
+                len(item["memory_access_events"]) for item in message_entries
+            ),
         }
 
         runs_analysis.append(run_payload)
@@ -144,7 +139,9 @@ def _build_run_analysis(
     return runs_analysis
 
 
-def export_database(from_date: datetime | None, to_date: datetime | None, output_path: Path) -> Path:
+def export_database(
+    from_date: datetime | None, to_date: datetime | None, output_path: Path
+) -> Path:
     """Export DB content and run-centric analysis into a single JSON file."""
     db = init_db()
 
@@ -162,7 +159,11 @@ def export_database(from_date: datetime | None, to_date: datetime | None, output
             messages: list[Message] = (
                 session.query(Message)
                 .filter(Message.run_id.in_(run_ids))
-                .order_by(Message.run_id.asc(), Message.sequence_index.asc(), Message.created_at.asc())
+                .order_by(
+                    Message.run_id.asc(),
+                    Message.sequence_index.asc(),
+                    Message.created_at.asc(),
+                )
                 .all()
             )
         else:
@@ -187,7 +188,11 @@ def export_database(from_date: datetime | None, to_date: datetime | None, output
             tool_calls = []
             memory_logs = []
 
-        memory_entries: list[MemoryEntry] = session.query(MemoryEntry).order_by(MemoryEntry.created_at.asc(), MemoryEntry.id.asc()).all()
+        memory_entries: list[MemoryEntry] = (
+            session.query(MemoryEntry)
+            .order_by(MemoryEntry.created_at.asc(), MemoryEntry.id.asc())
+            .all()
+        )
 
         payload = {
             "metadata": {
@@ -233,9 +238,18 @@ def export_database(from_date: datetime | None, to_date: datetime | None, output
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Export ZETA DB into a JSON file for run analysis.")
-    parser.add_argument("--from", dest="from_date", type=str, help="Start date (UTC): YYYY-MM-DD or ISO-8601")
-    parser.add_argument("--to", dest="to_date", type=str, help="End date (UTC): YYYY-MM-DD or ISO-8601")
+    parser = argparse.ArgumentParser(
+        description="Export ZETA DB into a JSON file for run analysis."
+    )
+    parser.add_argument(
+        "--from",
+        dest="from_date",
+        type=str,
+        help="Start date (UTC): YYYY-MM-DD or ISO-8601",
+    )
+    parser.add_argument(
+        "--to", dest="to_date", type=str, help="End date (UTC): YYYY-MM-DD or ISO-8601"
+    )
     parser.add_argument(
         "--output",
         dest="output",
@@ -259,10 +273,12 @@ def main() -> None:
         output_path = Path(args.output).resolve()
     else:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        output_path = Path(_root) / "test_tools" / "exports" / f"runs_export_{timestamp}.json"
+        output_path = Path.cwd() / "exports" / f"runs_export_{timestamp}.json"
 
-    exported_file = export_database(from_date=from_date, to_date=to_date, output_path=output_path)
-    print(f"Export complete: {exported_file}")
+    exported_file = export_database(
+        from_date=from_date, to_date=to_date, output_path=output_path
+    )
+    message(f"Export complete: {exported_file}")
 
 
 if __name__ == "__main__":
