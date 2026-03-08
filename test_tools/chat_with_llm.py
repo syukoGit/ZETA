@@ -209,7 +209,7 @@ async def _main() -> None:
                 llm.add_message("run", response_content, role="assistant")
                 _display_message(provider, "llm", response_content)
 
-            need_user_input = not client_calls
+            need_user_input = not tool_calls or not client_calls
     except Exception as exc:
         fail(f"An error occurred: {exc}")
     finally:
