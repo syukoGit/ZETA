@@ -107,7 +107,7 @@ async def cmd_create(tools: dict, message_id: str) -> None:
 
     memory_type = prompt(f"  {CYAN}Type (e.g. thesis, note, observation): ") or None
     source = prompt(f"  {CYAN}Source (optional): ") or None
-    tags_str = prompt(f"  {CYAN}Tags (comma-separated, optional): ") or None
+    tags_str = prompt(f"  {CYAN}Tags (comma-separated, optional): ")
     tags = [t.strip() for t in tags_str.split(",") if t.strip()] or None
 
     args: dict = {"content": content, "message_id": message_id}
