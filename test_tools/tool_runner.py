@@ -226,7 +226,10 @@ def _choose_tool_interactive(tools: Dict[str, ToolSpec]) -> Optional[str]:
 async def _main() -> None:
     header("Tool Runner")
 
-    _, run_id, message_id = init_database("tool_runner")
+    result = init_database("tool_runner")
+    if result is None:
+        return
+    _, run_id, message_id = result
 
     if message_id is None:
         return
