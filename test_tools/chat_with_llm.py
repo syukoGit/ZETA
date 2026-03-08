@@ -69,7 +69,7 @@ def _parse_client_selection(selection: str, max_items: int):
 
 
 async def _main() -> None:
-    header("Interactive Grok Chat")
+    header("Interactive LLM Chat")
 
     llm_cfg = config().llm
     provider = llm_cfg.provider
