@@ -45,7 +45,7 @@ def separator(char: str = "·", width: int = 56, end: str | None = "\n") -> None
 def prompt(label: str, choices: list[str] | None = None) -> str:
     choices_str = f" [{'/'.join(choices)}]" if choices is not None else ""
     while True:
-        choice = input(f"{label}{choices_str}{RESET}").strip().lower()
+        choice = input(f"{label}{choices_str}{RESET}").strip()
         if choices is None:
             return choice
         if choice in choices:
