@@ -338,11 +338,11 @@ def main() -> None:
         with db.get_session() as session:
             if args.run_id:
                 try:
-                    run_id = UUID(args.run_id)
+                    view_run_id = UUID(args.run_id)
                 except ValueError:
                     fail(f"Invalid UUID: {args.run_id}")
                     sys.exit(1)
-                _view_run(session, run_id, show_full=args.full)
+                _view_run(session, view_run_id, show_full=args.full)
             else:
                 _interactive(session, default_limit=args.limit)
     finally:
