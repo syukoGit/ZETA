@@ -195,7 +195,7 @@ async def cmd_update(tools: dict, message_id: str) -> None:
 
 async def cmd_deprecate(tools: dict, message_id: str) -> None:
     """Deprecate a memory entry."""
-    mid = prompt(f"  {CYAN}Memory ID (UUID): {RESET}")
+    mid = prompt(f"  {CYAN}Memory ID (UUID): ")
     if not mid:
         return
 
@@ -209,12 +209,12 @@ async def cmd_deprecate(tools: dict, message_id: str) -> None:
     info("Entry to deprecate:")
     _print_memory(current.get("entry", current))
 
-    confirm = prompt(f"\n  {YELLOW}Deprecate this entry? [y/N]: {RESET}")
-    if confirm not in ("y", "yes"):
+    confirm = prompt_yes_no(f"\n  {YELLOW}Deprecate this entry? {RESET}", default=False)
+    if not confirm:
         info("Cancelled.")
         return
 
-    reason = prompt(f"  {CYAN}Reason: {RESET}")
+    reason = prompt(f"  {CYAN}Reason: ")
     if not reason:
         fail("A reason is required.")
         return
