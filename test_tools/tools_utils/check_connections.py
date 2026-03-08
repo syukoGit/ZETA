@@ -172,7 +172,7 @@ async def init_ibkr() -> None:
     try:
         from ibkr.ibTools import init_ib_connection
 
-        ib = await init_ib_connection()
+        ib = await init_ib_connection(dry_run=False)
         if ib is None:
             fail("IBKR initialization failed.")
         else:
