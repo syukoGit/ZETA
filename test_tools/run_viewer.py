@@ -332,7 +332,10 @@ def main() -> None:
     args = parser.parse_args()
 
     db: DatabaseManager
-    db, run_id, _ = init_database("run_viewer")
+    result = init_database("run_viewer")
+    if result is None:
+        return
+    db, run_id, _ = result
 
     try:
         with db.get_session() as session:
