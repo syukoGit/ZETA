@@ -56,7 +56,8 @@ def prompt(label: str, choices: list[str] | None = None) -> str:
 
 def prompt_yes_no(label: str, default: bool = True) -> bool:
     while True:
-        choice = input(f"{label} [Y/n]: {RESET}").strip().lower()
+        choices_str = "[Y/n]" if default else "[y/N]"
+        choice = input(f"{label} {choices_str}: {RESET}").strip().lower()
         if not choice:
             return default
         if choice in ("y", "yes"):
