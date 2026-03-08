@@ -87,7 +87,11 @@ async def _main() -> None:
         return
 
     # Initialize DB
-    _, run_id, message_id = init_database("chat_with_llm")
+    db_init = init_database("chat_with_llm")
+    if db_init is None:
+        fail("Database initialization failed.")
+        return
+    _, run_id, message_id = db_init
 
     # Initialize IBKR
     await init_ibkr()
