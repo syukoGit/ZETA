@@ -40,9 +40,9 @@ async def _main() -> None:
 
     print()
     if all_passed:
-        print(f"{GREEN}{BOLD}All connection tests passed.{RESET}")
+        print(f"{GREEN}{BOLD}All connection tests passed.")
     else:
-        print(f"{RED}{BOLD}Some connection tests failed.{RESET}")
+        print(f"{RED}{BOLD}Some connection tests failed.")
 
 
 if __name__ == "__main__":
