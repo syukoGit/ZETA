@@ -299,7 +299,7 @@ async def _main() -> None:
         if run_id is not None:
             db_tools.end_run(run_id)
 
-    message(f"\n{BOLD}{YELLOW}Goodbye.")
+        message(f"\n{BOLD}{YELLOW}Goodbye.")
 
 
 if __name__ == "__main__":
