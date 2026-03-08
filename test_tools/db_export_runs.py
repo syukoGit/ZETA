@@ -254,7 +254,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--output",
         dest="output",
         type=str,
-        help="Output JSON path. Default: test_tools/exports/runs_export_<timestamp>.json",
+        help="Output JSON path. Default: <cwd>/exports/runs_export_<timestamp>.json",
     )
     return parser
 
