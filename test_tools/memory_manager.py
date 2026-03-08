@@ -251,7 +251,11 @@ MEMORY_TOOL_NAMES = [
 async def _main() -> None:
     header("Memory Manager")
 
-    _, run_id, message_id = init_database("memory_manager")
+    init_result = init_database("memory_manager")
+    if init_result is None:
+        fail("Failed to initialize database for memory_manager.")
+        return
+    _, run_id, message_id = init_result
 
     try:
         all_tools = get_tools()
