@@ -179,16 +179,3 @@ async def init_ibkr() -> None:
             ok("Connected successfully")
     except Exception as exc:
         fail(f"IBKR initialization failed: {exc}")
-
-
-# All tests
-async def test_connections() -> bool:
-    all_passed = True
-
-    if not test_database():
-        all_passed = False
-
-    if not await test_ibkr():
-        all_passed = False
-
-    return all_passed
