@@ -113,7 +113,7 @@ def _collect_args_for_model(model: type[BaseModel]) -> Dict[str, Any]:
 
     while True:
         collected: Dict[str, Any] = {}
-        message(f"  Provide tool parametters: ")
+        message(f"  Provide tool parameters: ")
 
         for field_name, field_info in fields.items():
             required = field_info.is_required()
