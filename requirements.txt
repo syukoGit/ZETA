@@ -7,6 +7,8 @@ pgvector
 psycopg2-binary
 pydantic
 python-dotenv
+pyyaml
 sentence-transformers
 sqlalchemy
+watchdog
 xai-sdk
