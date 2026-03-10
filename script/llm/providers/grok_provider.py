@@ -12,6 +12,7 @@ from llm.tools.base import get_tools
 
 logger = get_logger(__name__)
 
+
 class GrokProvider(LLM):
     _client = None
 
@@ -34,8 +35,8 @@ class GrokProvider(LLM):
     @property
     def name(self) -> str:
         return "grok"
-    
-    def add_message(self, chat_type, content, role):        
+
+    def add_message(self, chat_type, content, role):
         if chat_type == "run":
             chat = self._chat_run
         elif chat_type == "review":
@@ -53,7 +54,7 @@ class GrokProvider(LLM):
             chat.append(tool_result(content))
         else:
             raise ValueError(f"Unsupported message role: {role}")
-    
+
     def get_response(self, chat_type) -> tuple[Any, list]:
         if chat_type == "run":
             chat = self._chat_run
@@ -61,12 +62,16 @@ class GrokProvider(LLM):
             chat = self._chat_review
         else:
             raise ValueError(f"Unsupported chat type for get_response: {chat_type}")
-        
+
         response = chat.sample()
-        
+
         tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
 
-        logger.debug("LLM response: %s tool_calls, content length=%d", len(tool_calls), len(response.content))
+        logger.debug(
+            "LLM response: %s tool_calls, content length=%d",
+            len(tool_calls),
+            len(response.content),
+        )
         return response, tool_calls
 
     def is_client_side_tool(self, tool_call) -> bool:
@@ -74,13 +79,13 @@ class GrokProvider(LLM):
             return False
         tool_call_type = get_tool_call_type(tool_call)
         return tool_call_type == "client_side_tool"
-    
+
     async def execute_client_side_tool(self, tool_call, message_id) -> dict:
         try:
             if not isinstance(tool_call, ToolCall):
                 raise ValueError("Invalid tool call type.")
 
-            name, args = self.get_tool_calls_info(tool_call)          
+            name, args = self.get_tool_calls_info(tool_call)
             logger.debug("Dispatching tool: %s with args: %s", name, args)
 
             tool = get_tools()[name]
@@ -92,16 +97,21 @@ class GrokProvider(LLM):
         except Exception as e:
             logger.error("Tool execution error: %s", e)
             raise ValueError(f"Error: {str(e)}")
-    
+
     def get_tool_calls_info(self, tool_call) -> tuple[str, dict]:
         if not isinstance(tool_call, ToolCall):
             raise ValueError("Invalid tool call type.")
-        
+
         name = tool_call.function.name
-        args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
+        args = (
+            json.loads(tool_call.function.arguments)
+            if tool_call.function.arguments
+            else {}
+        )
         return name, args
 
-def get_grok_tool(mode: ChatMode) -> list:
+
+def get_grok_tool(mode: ChatMode, disabled: list[str] | None = None) -> list:
     return [
         x_search(enable_image_understanding=True, enable_video_understanding=True),
         web_search(enable_image_understanding=True),
@@ -109,10 +119,11 @@ def get_grok_tool(mode: ChatMode) -> list:
             tool(
                 name=k,
                 description=v.description,
-                parameters=v.args_model.model_json_schema()
+                parameters=v.args_model.model_json_schema(),
             )
-            for k, v in get_tools(mode).items()
-        ]
+            for k, v in get_tools(mode, disabled).items()
+        ],
     ]
+
 
 LLMFactory.register_provider("grok", GrokProvider)

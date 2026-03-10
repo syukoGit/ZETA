@@ -10,6 +10,7 @@ from llm.llm_provider import LLMFactory
 from llm.tools.ibkr.get_cash_balance import get_cash_balance
 from llm.tools.ibkr.get_open_trades import get_open_trades
 from llm.tools.ibkr.get_positions import get_positions
+from phase_resolver import get_current_phase
 from utils.json_utils import dumps_json
 
 logger = get_logger(__name__)
@@ -30,7 +31,7 @@ async def run_llm_call(
         run_id = dbTools.start_run("llm_call", llm.name, llm.model)
 
         # Add initial system prompt to set the context for the LLM
-        run_prompt = get_prompt("start_prompt")
+        run_prompt = get_prompt(get_current_phase().config.prompt_file)
         llm.add_message("run", run_prompt, role="system")
         dbTools.add_message(run_id, "system", run_prompt)
 

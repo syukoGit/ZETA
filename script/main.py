@@ -8,6 +8,7 @@ from db.db_tools import DBTools
 from config import config, start_config_watcher
 from logger import setup_logging, get_logger
 from llm.llm_call import run_llm_call, run_llm_review_call
+from phase_resolver import refresh_phase, get_current_phase
 from utils.market_status import get_market_status
 from utils.timing import get_wait_time, countdown_display
 
@@ -43,8 +44,11 @@ async def main():
     try:
         ib = await init_ib_connection(dry_run)
 
-        run_counter = config().review.every_n_trades
+        run_counter = 0
         while True:
+            await refresh_phase()
+            phase_cfg = get_current_phase().config
+
             if any(
                 market_status.get("status") == "OPEN"
                 for market_status in get_market_status(
@@ -55,7 +59,7 @@ async def main():
             else:
                 run_counter = 0  # Reset counter if markets are closed
 
-            if run_counter >= config().review.every_n_trades:
+            if run_counter >= phase_cfg.review.runs_before_review:
                 run_counter = 0
                 try:
                     logger.info(
@@ -90,11 +94,15 @@ async def main():
                     )
 
                     previous_reporting = summary
-                    time_before_next_run = (
-                        time_before_next_run_s
-                        if time_before_next_run_s is not None
-                        else config().default_wait_seconds
-                    )
+                    if time_before_next_run_s is not None:
+                        time_before_next_run = max(
+                            phase_cfg.run_interval.min,
+                            min(
+                                phase_cfg.run_interval.max, int(time_before_next_run_s)
+                            ),
+                        )
+                    else:
+                        time_before_next_run = phase_cfg.run_interval.min
 
                     logger.info(
                         "LLM call completed (%s). Summary: %s",
@@ -104,7 +112,7 @@ async def main():
                 except Exception as e:
                     logger.error("Error during LLM call: %s", e)
                     previous_reporting = {}
-                    time_before_next_run = config().default_wait_seconds
+                    time_before_next_run = phase_cfg.run_interval.min
 
                 logger.info(
                     "Reporting (%s):",
