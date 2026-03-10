@@ -11,7 +11,10 @@ EXCHANGES_CALENDARS: Dict[str, str] = {
     "AMEX": "XASE",
 }
 
-def get_next_session_open(calendar: xc.ExchangeCalendar, now: datetime) -> datetime | None:
+
+def get_next_session_open(
+    calendar: xc.ExchangeCalendar, now: datetime
+) -> datetime | None:
     """
     Find the next session open time from a given datetime.
 
@@ -61,18 +64,25 @@ def get_market_status(now: datetime) -> Dict[str, Any]:
         try:
             is_open = calendar.is_open_on_minute(ts)
             if is_open:
-                close_time = calendar.session_close(calendar.minute_to_session(ts))
+                session = calendar.minute_to_session(ts)
+                open_time = calendar.session_open(session)
+                close_time = calendar.session_close(session)
                 next_open = get_next_session_open(calendar, ts)
                 statuses[name] = {
                     "status": "OPEN",
+                    "opened_at_utc": open_time.strftime("%H:%M"),
                     "closes_at_utc": close_time.strftime("%H:%M"),
-                    "next_session_open_utc": next_open.strftime("%Y-%m-%d %H:%M") if next_open else None,
+                    "next_session_open_utc": (
+                        next_open.strftime("%Y-%m-%d %H:%M") if next_open else None
+                    ),
                 }
             else:
                 next_open = get_next_session_open(calendar, ts)
                 statuses[name] = {
                     "status": "CLOSED",
-                    "next_session_open_utc": next_open.strftime("%Y-%m-%d %H:%M") if next_open else None,
+                    "next_session_open_utc": (
+                        next_open.strftime("%Y-%m-%d %H:%M") if next_open else None
+                    ),
                 }
         except Exception as e:
             print(f"Error checking market status for {name}: {e}")
@@ -87,8 +97,10 @@ def parse_market_snapshot(now: datetime = None) -> dict:
 
     Returns a dict with:
         - any_open: bool
-        - latest_close: datetime | None  (latest close among open exchanges)
-        - earliest_next_open: datetime | None  (soonest next open across all exchanges)
+        - earliest_current_open: datetime | None  (earliest open time among currently-open exchanges)
+        - soonest_close: datetime | None           (soonest close among currently-open exchanges)
+        - latest_close: datetime | None            (latest close among currently-open exchanges)
+        - earliest_next_open: datetime | None      (soonest next open across all exchanges)
     """
     if now is None:
         now = datetime.now(timezone.utc)
@@ -97,6 +109,8 @@ def parse_market_snapshot(now: datetime = None) -> dict:
     today = now.date()
 
     any_open = False
+    earliest_current_open: datetime | None = None
+    soonest_close: datetime | None = None
     latest_close: datetime | None = None
     earliest_next_open: datetime | None = None
 
@@ -105,21 +119,39 @@ def parse_market_snapshot(now: datetime = None) -> dict:
 
         if status == "OPEN":
             any_open = True
+
+            open_str = info.get("opened_at_utc")
+            if open_str:
+                h, m = map(int, open_str.split(":"))
+                open_dt = datetime(
+                    today.year, today.month, today.day, h, m, tzinfo=timezone.utc
+                )
+                if earliest_current_open is None or open_dt < earliest_current_open:
+                    earliest_current_open = open_dt
+
             close_str = info.get("closes_at_utc")
             if close_str:
                 h, m = map(int, close_str.split(":"))
-                close_dt = datetime(today.year, today.month, today.day, h, m, tzinfo=timezone.utc)
+                close_dt = datetime(
+                    today.year, today.month, today.day, h, m, tzinfo=timezone.utc
+                )
+                if soonest_close is None or close_dt < soonest_close:
+                    soonest_close = close_dt
                 if latest_close is None or close_dt > latest_close:
                     latest_close = close_dt
 
         next_open_str = info.get("next_session_open_utc")
         if next_open_str:
-            next_open_dt = datetime.strptime(next_open_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            next_open_dt = datetime.strptime(next_open_str, "%Y-%m-%d %H:%M").replace(
+                tzinfo=timezone.utc
+            )
             if earliest_next_open is None or next_open_dt < earliest_next_open:
                 earliest_next_open = next_open_dt
 
     return {
         "any_open": any_open,
+        "earliest_current_open": earliest_current_open,
+        "soonest_close": soonest_close,
         "latest_close": latest_close,
         "earliest_next_open": earliest_next_open,
     }

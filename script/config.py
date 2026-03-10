@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
@@ -23,7 +24,117 @@ class LLMConfig(BaseModel):
 
 class ReviewConfig(BaseModel):
     llm: LLMConfig
-    every_n_trades: int
+
+
+class RunIntervalConfig(BaseModel):
+    min: int
+    max: int
+
+
+class PhaseToolsConfig(BaseModel):
+    disable: list[str] = Field(default_factory=list)
+
+
+class PhaseReviewConfig(BaseModel):
+    runs_before_review: int
+
+
+class DefaultPhaseConfig(BaseModel):
+    run_interval: RunIntervalConfig
+    review: PhaseReviewConfig
+    tools: PhaseToolsConfig
+
+
+class PhaseOverrideConfig(BaseModel):
+    run_interval: Optional[RunIntervalConfig] = None
+    review: Optional[PhaseReviewConfig] = None
+    tools: Optional[PhaseToolsConfig] = None
+    prompt_file: str
+
+
+class HighVolatilityTrigger(BaseModel):
+    vix_above: Optional[float] = None
+    index_move_pct: Optional[float] = None
+
+
+class PreMarketConfig(BaseModel):
+    start_utc: str = Field(
+        ...,
+        description="Start of the pre-market window in UTC (HH:MM)",
+        pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$",
+    )
+    end_utc: str = Field(
+        ...,
+        description="End of the pre-market window in UTC (HH:MM, exclusive)",
+        pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$",
+    )
+
+
+class WindowConfig(BaseModel):
+    window_minutes: int = Field(
+        ..., gt=0, description="Duration of the window in minutes"
+    )
+
+
+class HighVolatilityResolverConfig(BaseModel):
+    triggers: list[HighVolatilityTrigger] = Field(default_factory=list)
+
+
+class PhaseConfig(BaseModel):
+    off_market_short_threshold_hours: int = Field(
+        default=6,
+        gt=0,
+        description="Hours before next open below which OFF_MARKET_SHORT is active",
+    )
+    pre_market: PreMarketConfig
+    opening_window: WindowConfig
+    closing_window: WindowConfig
+    high_volatility: HighVolatilityResolverConfig
+
+
+class ResolvedPhaseConfig(BaseModel):
+    run_interval: RunIntervalConfig
+    review: PhaseReviewConfig
+    tools: PhaseToolsConfig
+    prompt_file: str
+
+
+class Phase(str, Enum):
+    PRE_MARKET = "PRE_MARKET"
+    OPENING_WINDOW = "OPENING_WINDOW"
+    MARKET_SESSION = "MARKET_SESSION"
+    CLOSING_WINDOW = "CLOSING_WINDOW"
+    OFF_MARKET_SHORT = "OFF_MARKET_SHORT"
+    OFF_MARKET_LONG = "OFF_MARKET_LONG"
+    HIGH_VOLATILITY = "HIGH_VOLATILITY"
+
+
+class PhasesConfig(BaseModel):
+    default: DefaultPhaseConfig
+    PRE_MARKET: PhaseOverrideConfig
+    OPENING_WINDOW: PhaseOverrideConfig
+    MARKET_SESSION: PhaseOverrideConfig
+    CLOSING_WINDOW: PhaseOverrideConfig
+    OFF_MARKET_SHORT: PhaseOverrideConfig
+    OFF_MARKET_LONG: PhaseOverrideConfig
+    HIGH_VOLATILITY: PhaseOverrideConfig
+
+    def resolved_phase(self, phase: Phase | str) -> ResolvedPhaseConfig:
+        """Merge default config with the phase override (phase wins on non-None fields)."""
+        phase_name = phase.value if isinstance(phase, Phase) else phase
+        override: PhaseOverrideConfig = getattr(self, phase_name)
+        d = self.default
+
+        return ResolvedPhaseConfig(
+            run_interval=(
+                override.run_interval
+                if override.run_interval is not None
+                else d.run_interval
+            ),
+            review=override.review if override.review is not None else d.review,
+            tools=override.tools if override.tools is not None else d.tools,
+            prompt_file=override.prompt_file,
+        )
 
 
 class IBKRConfig(BaseModel):
@@ -50,14 +161,13 @@ class AppConfig(BaseModel):
 
     debug_print: bool = Field(alias="debugPrint")
     dry_run: bool
-    min_wait_seconds: int
-    default_wait_seconds: int
-    off_hours_wait_seconds: int
     llm: LLMConfig
     review: ReviewConfig
     embedding_model: str
     ibkr: IBKRConfig
     snapshot: SnapshotConfig
+    phases: PhasesConfig
+    phase_config: PhaseConfig
 
 
 _lock = threading.RLock()
