@@ -98,42 +98,6 @@ async def _check_vix_above(threshold: float) -> bool:
     return price > threshold
 
 
-async def _check_index_move(threshold_pct: float) -> bool:
-    """Return True if any non-VIX snapshot index moved > *threshold_pct*% from its open."""
-    indices = [idx for idx in config().snapshot.indices if idx.symbol.upper() != "VIX"]
-    if not indices:
-        return False
-
-    for idx in indices:
-        ticker = await _fetch_ticker(idx.symbol, idx.exchange, idx.currency)
-        if ticker is None:
-            continue
-
-        last = _clean_price(ticker.last)
-        open_ = _clean_price(ticker.open)
-
-        if last is None or open_ is None or open_ == 0:
-            logger.debug(
-                "phase_resolver: skipping index_move check for %s — last=%s open=%s",
-                idx.symbol,
-                last,
-                open_,
-            )
-            continue
-
-        move_pct = abs(last - open_) / open_ * 100
-        logger.debug(
-            "phase_resolver: %s move=%.2f%% (threshold=%.2f%%)",
-            idx.symbol,
-            move_pct,
-            threshold_pct,
-        )
-        if move_pct > threshold_pct:
-            return True
-
-    return False
-
-
 async def _check_high_volatility() -> bool:
     """
     Evaluate HIGH_VOLATILITY triggers in order. Short-circuits on first match.
@@ -148,14 +112,6 @@ async def _check_high_volatility() -> bool:
                 logger.info(
                     "phase_resolver: HIGH_VOLATILITY triggered (vix_above=%.1f)",
                     trigger.vix_above,
-                )
-                return True
-            if trigger.index_move_pct is not None and await _check_index_move(
-                trigger.index_move_pct
-            ):
-                logger.info(
-                    "phase_resolver: HIGH_VOLATILITY triggered (index_move_pct=%.1f%%)",
-                    trigger.index_move_pct,
                 )
                 return True
         except Exception:
