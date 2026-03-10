@@ -18,17 +18,17 @@ _CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
 
 
 class LLMConfig(BaseModel):
-    provider: str
-    model: str
+    provider: str = "grok"
+    model: str = "grok-4-1-fast-reasoning"
 
 
 class ReviewConfig(BaseModel):
-    llm: LLMConfig
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
 
 class RunIntervalConfig(BaseModel):
-    min: int
-    max: int
+    min: int = 60
+    max: int = 300
 
 
 class PhaseToolsConfig(BaseModel):
@@ -36,20 +36,20 @@ class PhaseToolsConfig(BaseModel):
 
 
 class PhaseReviewConfig(BaseModel):
-    runs_before_review: int
+    runs_before_review: int = 15
 
 
 class DefaultPhaseConfig(BaseModel):
-    run_interval: RunIntervalConfig
-    review: PhaseReviewConfig
-    tools: PhaseToolsConfig
+    run_interval: RunIntervalConfig = Field(default_factory=RunIntervalConfig)
+    review: PhaseReviewConfig = Field(default_factory=PhaseReviewConfig)
+    tools: PhaseToolsConfig = Field(default_factory=PhaseToolsConfig)
 
 
 class PhaseOverrideConfig(BaseModel):
     run_interval: Optional[RunIntervalConfig] = None
     review: Optional[PhaseReviewConfig] = None
     tools: Optional[PhaseToolsConfig] = None
-    prompt_file: str
+    prompt_file: str = ""
 
 
 class HighVolatilityTrigger(BaseModel):
@@ -59,12 +59,12 @@ class HighVolatilityTrigger(BaseModel):
 
 class PreMarketConfig(BaseModel):
     start_utc: str = Field(
-        ...,
+        default="12:00",
         description="Start of the pre-market window in UTC (HH:MM)",
         pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$",
     )
     end_utc: str = Field(
-        ...,
+        default="13:30",
         description="End of the pre-market window in UTC (HH:MM, exclusive)",
         pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$",
     )
@@ -72,7 +72,7 @@ class PreMarketConfig(BaseModel):
 
 class WindowConfig(BaseModel):
     window_minutes: int = Field(
-        ..., gt=0, description="Duration of the window in minutes"
+        default=30, gt=0, description="Duration of the window in minutes"
     )
 
 
@@ -86,10 +86,12 @@ class PhaseConfig(BaseModel):
         gt=0,
         description="Hours before next open below which OFF_MARKET_SHORT is active",
     )
-    pre_market: PreMarketConfig
-    opening_window: WindowConfig
-    closing_window: WindowConfig
-    high_volatility: HighVolatilityResolverConfig
+    pre_market: PreMarketConfig = Field(default_factory=PreMarketConfig)
+    opening_window: WindowConfig = Field(default_factory=WindowConfig)
+    closing_window: WindowConfig = Field(default_factory=WindowConfig)
+    high_volatility: HighVolatilityResolverConfig = Field(
+        default_factory=HighVolatilityResolverConfig
+    )
 
 
 class ResolvedPhaseConfig(BaseModel):
@@ -110,14 +112,14 @@ class Phase(str, Enum):
 
 
 class PhasesConfig(BaseModel):
-    default: DefaultPhaseConfig
-    PRE_MARKET: PhaseOverrideConfig
-    OPENING_WINDOW: PhaseOverrideConfig
-    MARKET_SESSION: PhaseOverrideConfig
-    CLOSING_WINDOW: PhaseOverrideConfig
-    OFF_MARKET_SHORT: PhaseOverrideConfig
-    OFF_MARKET_LONG: PhaseOverrideConfig
-    HIGH_VOLATILITY: PhaseOverrideConfig
+    default: DefaultPhaseConfig = Field(default_factory=DefaultPhaseConfig)
+    PRE_MARKET: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    OPENING_WINDOW: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    MARKET_SESSION: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    CLOSING_WINDOW: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    OFF_MARKET_SHORT: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    OFF_MARKET_LONG: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    HIGH_VOLATILITY: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
 
     def resolved_phase(self, phase: Phase | str) -> ResolvedPhaseConfig:
         """Merge default config with the phase override (phase wins on non-None fields)."""
@@ -138,12 +140,12 @@ class PhasesConfig(BaseModel):
 
 
 class IBKRConfig(BaseModel):
-    host: str
-    port: int
-    clientId: int
-    min_cash_reserve: float
-    cash_reserve_currency: str
-    excluded_cash_currencies: list[str]
+    host: str = "127.0.0.1"
+    port: int = 4002
+    clientId: int = 0
+    min_cash_reserve: float = 500.0
+    cash_reserve_currency: str = "USD"
+    excluded_cash_currencies: list[str] = Field(default_factory=list)
 
 
 class SnapshotIndex(BaseModel):
@@ -153,21 +155,21 @@ class SnapshotIndex(BaseModel):
 
 
 class SnapshotConfig(BaseModel):
-    indices: list[SnapshotIndex]
+    indices: list[SnapshotIndex] = Field(default_factory=list)
 
 
 class AppConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    debug_print: bool = Field(alias="debugPrint")
-    dry_run: bool
-    llm: LLMConfig
-    review: ReviewConfig
-    embedding_model: str
-    ibkr: IBKRConfig
-    snapshot: SnapshotConfig
-    phases: PhasesConfig
-    phase_config: PhaseConfig
+    debug_print: bool = Field(default=False, alias="debugPrint")
+    dry_run: bool = True
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
+    embedding_model: str = "sentence-transformers/nli-bert-large"
+    ibkr: IBKRConfig = Field(default_factory=IBKRConfig)
+    snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
+    phases: PhasesConfig = Field(default_factory=PhasesConfig)
+    phase_config: PhaseConfig = Field(default_factory=PhaseConfig)
 
 
 _lock = threading.RLock()
@@ -175,6 +177,18 @@ _current_config: Optional[AppConfig] = None
 
 
 def _load_config() -> AppConfig:
+    if not _CONFIG_PATH.exists():
+        default_cfg = AppConfig()
+        raw_dict = default_cfg.model_dump(by_alias=True, exclude_none=True)
+        _CONFIG_PATH.write_text(
+            yaml.dump(
+                raw_dict, default_flow_style=False, allow_unicode=True, sort_keys=False
+            ),
+            encoding="utf-8",
+        )
+        logger.warning(
+            "config.yaml not found — created default config at %s", _CONFIG_PATH
+        )
     with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh)
     return AppConfig.model_validate(raw)
