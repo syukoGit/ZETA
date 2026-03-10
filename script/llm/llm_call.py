@@ -149,7 +149,7 @@ async def run_llm_review_call(
         review_id = dbTools.start_run("review", llm.name, llm.model)
 
         # Add initial system prompt to set the context for the LLM
-        review_prompt = get_prompt("review.txt")
+        review_prompt = get_prompt("review_prompt.txt")
         llm.add_message("review", review_prompt, role="system")
         dbTools.add_message(review_id, "system", review_prompt)
 
