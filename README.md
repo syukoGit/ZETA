@@ -202,7 +202,7 @@ Phase-level values override `phases.default` only when explicitly set. Resolutio
 
 ### Runtime config (`config.yaml`)
 
-`config.yaml` is versioned and located at the repository root. Its path is resolved at import time from `script/config.py` and is **independent of the working directory**.
+`config.yaml` is located at the repository root. Its path is resolved at import time from `script/config.py` and is **independent of the working directory**.
 
 - Changes are hot-reloaded automatically via `watchdog` (no restart required).
 - If the file is invalid, ZETA fails fast with a clear error.
