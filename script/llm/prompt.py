@@ -9,7 +9,7 @@ _PROMPTS_DIR = _PROJECT_ROOT / "prompts"
 
 
 def get_prompt(prompt_name: str) -> str:
-    prompt_file = _PROMPTS_DIR / f"{prompt_name}.txt"
+    prompt_file = _PROMPTS_DIR / f"{prompt_name}"
     try:
         content = prompt_file.read_text(encoding="utf-8")
         if content:
