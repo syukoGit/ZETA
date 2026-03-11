@@ -42,7 +42,6 @@ async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
                 "symbol": a.symbol,
                 "exchange": a.exchange,
                 "currency": a.currency,
-                "sec_type": "STK",
             }
         )
 

@@ -6,6 +6,7 @@ from config import config
 
 logger = get_logger(__name__)
 
+
 async def init_ib_connection(dry_run: bool = True) -> IB:
     ib = IB()
 
@@ -27,6 +28,7 @@ async def init_ib_connection(dry_run: bool = True) -> IB:
 
     return ib
 
+
 class IBTools:
     _instance: Optional["IBTools"] = None
 
@@ -45,7 +47,9 @@ class IBTools:
     @classmethod
     def get_instance(cls) -> "IBTools":
         if cls._instance is None:
-            raise RuntimeError("IBTools has not been initialized. Call IBTools(ib, ib_sem=...) first.")
+            raise RuntimeError(
+                "IBTools has not been initialized. Call IBTools(ib, ib_sem=...) first."
+            )
         return cls._instance
 
     @classmethod

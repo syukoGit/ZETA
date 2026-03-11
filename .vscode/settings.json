@@ -1,9 +1,9 @@
 {
   "python.analysis.typeCheckingMode": "off",
   "[python]": {
-    "editor.tabSize": 4
+    "editor.tabSize": 4,
+    "editor.defaultFormatter": "ms-python.black-formatter"
   },
   "python.analysis.extraPaths": ["${workspaceFolder}/script"],
-  "editor.fontSize": 14,
-  "postman.settings.dotenv-detection-notification-visibility": false
+  "editor.fontSize": 14
 }

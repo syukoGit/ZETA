@@ -1,8 +1,7 @@
 *.env
 *.tmp
 
-/config.json
-/script/config.json
+config.yaml
 
 __pycache__/
 venv/

@@ -17,13 +17,14 @@ ZETA is not a simple assistant that suggests trades — it **executes them itsel
 │                        Main Loop                        │
 │                        (main.py)                        │
 │                                                         │
-│  1. IBKR Snapshot (positions, cash, open orders,        │
+│  1. Phase resolution (market status + volatility)       │
+│  2. IBKR Snapshot (positions, cash, open orders,        │
 │     index quotes from config)                           │
-│  2. LLM run call with context + tools                  │
-│  3. Tool call execution (IBKR, memory, history, etc.)  │
-│  4. close_run returns summary + next wait               │
-│  5. Dynamic market-aware wait → back to step 1         │
-│  6. Periodic review cycle                  │
+│  3. LLM run call with phase prompt + context + tools   │
+│  4. Tool call execution (IBKR, memory, history, etc.)  │
+│  5. close_run returns summary + next wait               │
+│  6. Wait clamped to phase [min, max] interval          │
+│  7. Periodic review (runs_before_review threshold)     │
 └─────────────────────────────────────────────────────────┘
          │                    │                  │
          ▼                    ▼                  ▼
@@ -41,22 +42,25 @@ ZETA is not a simple assistant that suggests trades — it **executes them itsel
 | `script/llm/llm_call.py` | Orchestrates both run and review calls, including tool loop and structured close tools |
 | `script/llm/llm_provider.py` | LLM provider abstraction (abstract `LLM` class + factory with dynamic loading) |
 | `script/llm/providers/grok_provider.py` | Grok (xAI) provider implementation with streaming, tool calling, and built-in web/X search |
-| `script/llm/start_prompt.py` | Loader exposing `DEFAULT_START_PROMPT` from local file `prompts/start_prompt.txt` (git-ignored) |
-| `script/llm/review_prompt.py` | Loader exposing `REVIEW_PROMPT` from local file `prompts/review_prompt.txt` (git-ignored) |
+| `script/llm/prompt.py` | Loads phase-specific and review prompt files from the `prompts/` directory via `get_prompt()` |
 | `script/llm/tools/` | Auto-discovered tool registry that the LLM can call |
 | `script/ibkr/ibTools.py` | Interactive Brokers connection singleton via `ib_async` |
 | `script/db/` | Database layer (SQLAlchemy + pgvector): models, sessions, repositories |
-| `script/config.py` | JSON configuration file loading with hot-reload |
+| `script/config.py` | YAML configuration loading with hot-reload (via `watchdog`); defines all config models including phase structure |
+| `script/phase_resolver.py` | Resolves the active execution phase based on time, market status and volatility triggers |
 | `script/utils/timing.py` | Market-calendar-aware wait time calculation between iterations |
 
 ### Local prompts (not versioned)
 
-Create these local files on your machine:
+Create these local prompt files (all are git-ignored):
 
-- `prompts/start_prompt.txt`
+**Phase prompts** — file names match the `prompt_file` key configured per phase in `config.yaml`.
+
+**Review prompt:**
+
 - `prompts/review_prompt.txt`
 
-Both are intentionally git-ignored. At runtime, `script/llm/start_prompt.py` and `script/llm/review_prompt.py` load those files and expose the same constants used by the rest of the codebase.
+At runtime, `script/llm/prompt.py` loads the appropriate file via `get_prompt()` based on the resolved phase.
 
 ---
 
@@ -167,82 +171,60 @@ In parallel, a periodic review cycle analyzes recent runs and ends through `clos
 
 ---
 
-## Smart Scheduling
+## Phase-Based Execution
 
-ZETA automatically adapts its cadence based on context:
+ZETA resolves its active **phase** at the start of every iteration and adapts its prompt, scheduling, and tool availability accordingly.
 
-| Context | Behavior |
-| --- | --- |
-| **Markets open** | Uses LLM-provided wait (`time_before_next_run_s`), clamped by `min_wait_seconds` and adjusted to not exceed market close |
-| **Markets closed** | Waits until next exchange open, capped by `off_hours_wait_seconds` |
-| **Minimum wait** | Configurable via `min_wait_seconds` |
-| **Default wait fallback** | Configurable via `default_wait_seconds` |
+Phases are evaluated in priority order:
+
+| Priority | Phase | Condition |
+| -------- | ----- | --------- |
+| 1 | `HIGH_VOLATILITY` | Market open **AND** VIX > threshold |
+| 2 | `OPENING_WINDOW` | Market open, within `opening_window.window_minutes` after the earliest exchange open |
+| 3 | `CLOSING_WINDOW` | Market open, within `closing_window.window_minutes` before the earliest exchange close |
+| 4 | `MARKET_SESSION` | Market open, outside both windows |
+| 5 | `PRE_MARKET` | Market closed, current UTC time within the `phase_config.pre_market` window |
+| 6 | `OFF_MARKET_SHORT` | Market closed, next open ≤ `off_market_short_threshold_hours` away |
+| 7 | `OFF_MARKET_LONG` | Market closed, next open > threshold |
+
+Each phase defines:
+
+- **`prompt_file`** — file loaded from `prompts/` as the LLM system prompt
+- **`run_interval.min` / `run_interval.max`** — wait time (seconds) between runs; the LLM-suggested value is clamped to this range
+- **`review.runs_before_review`** — number of consecutive market-open runs before triggering a strategic review
+- **`tools.disable`** — list of tool names disabled for this phase
+
+Phase-level values override `phases.default` only when explicitly set. Resolution logic lives in `script/phase_resolver.py`; scheduling in `script/utils/timing.py`.
 
 ---
 
 ## Configuration
 
-### Runtime config (`config.json`)
+### Runtime config (`config.yaml`)
 
-`config.json` is a local runtime file and is not versioned.
+`config.yaml` is located at the repository root. Its path is resolved at import time from `script/config.py` and is **independent of the working directory**.
 
-- It is loaded from the current working directory (`Path.cwd()` at runtime).
-- If missing at startup, ZETA auto-generates a default `config.json`.
-- Changes are hot-reloaded automatically (no restart required).
-- If the file exists but is invalid, ZETA fails fast with a clear error.
-- On load/reload, ZETA logs the resolved path (`Runtime config loaded/reloaded from ...`).
-
-The versioned schema is available in `config.schema.json`.
-
-```json
-{
-  "debugPrint": false,
-  "dry_run": true,
-  "min_wait_seconds": 60,
-  "default_wait_seconds": 600,
-  "off_hours_wait_seconds": 3600,
-  "llm": {
-    "provider": "grok",
-    "model": "grok-4-1-fast-reasoning"
-  },
-  "review": {
-    "llm": {
-      "provider": "grok",
-      "model": "grok-4-1-fast-reasoning"
-    },
-    "every_n_trades": 5
-  },
-  "embedding_model": "sentence-transformers/nli-bert-large",
-  "ibkr": {
-    "host": "127.0.0.1",
-    "port": 7497,
-    "clientId": 0,
-    "min_cash_reserve": 0,
-    "cash_reserve_currency": "BASE",
-    "excluded_cash_currencies": []
-  },
-  "snapshot": {
-    "indices": [
-      { "symbol": "VIX", "exchange": "CBOE" },
-      { "symbol": "SPX", "exchange": "CBOE" }
-    ]
-  }
-}
-```
+- Changes are hot-reloaded automatically via `watchdog` (no restart required).
+- If the file is invalid, ZETA fails fast with a clear error.
+- On reload, ZETA logs the resolved path.
 
 | Key | Description |
 | --- | --- |
 | `debugPrint` | Enables DEBUG level logs (color-coded in console) |
 | `dry_run` | If `true`, orders are not actually sent to IBKR (simulation mode) |
-| `min_wait_seconds` | Minimum time between two iterations (in seconds) |
-| `default_wait_seconds` | Default wait time if the LLM does not specify a value |
-| `off_hours_wait_seconds` | Maximum wait while markets are closed |
 | `llm.provider` | LLM provider to use (`grok`) |
 | `llm.model` | Specific LLM model |
-| `review.*` | Settings for periodic strategic review loop |
+| `review.llm.*` | LLM settings for the periodic review loop |
 | `embedding_model` | Embedding model for vector memory |
 | `ibkr.*` | IBKR settings (`host`, `port`, `clientId`, `min_cash_reserve`, `cash_reserve_currency`, `excluded_cash_currencies`) |
-| `snapshot.indices` | List of indices to fetch and inject into the snapshot at the start of each run. Each entry requires `symbol` and `exchange` (e.g. `CBOE`); `currency` is optional and defaults to `USD`. The quoted `last` price for each index is included in `SNAPSHOT_IB` under `quotes`. |
+| `snapshot.indices` | List of indices fetched and injected into the snapshot at the start of each run. Each entry requires `symbol` and `exchange`; `currency` defaults to `USD`. |
+| `phases.default` | Default execution parameters: `run_interval.min/max`, `review.runs_before_review`, `tools.disable` |
+| `phases.<PHASE>` | Per-phase overrides for `run_interval`, `review`, `tools`, and `prompt_file` (non-null values override default) |
+| `phase_config.off_market_short_threshold_hours` | Hours before next open below which `OFF_MARKET_SHORT` is active (default: 6) |
+| `phase_config.pre_market.start_utc` / `end_utc` | UTC time window (HH:MM) for the `PRE_MARKET` phase |
+| `phase_config.opening_window.window_minutes` | Duration of the `OPENING_WINDOW` phase (minutes after market open) |
+| `phase_config.closing_window.window_minutes` | Duration of the `CLOSING_WINDOW` phase (minutes before market close) |
+| `phase_config.high_volatility.triggers` | Ordered list of triggers for `HIGH_VOLATILITY` (`vix_above`) |
 
 When `get_cash_balance` is called, ZETA first excludes currencies listed in `ibkr.excluded_cash_currencies`, then subtracts `ibkr.min_cash_reserve` from the `CashBalance` of `ibkr.cash_reserve_currency` only, and clamps the result to `0`.
 
@@ -265,7 +247,7 @@ All environment variables are defined in a `.env` file at the project root (load
 
 - **Python 3.11+**
 - **Docker** (for PostgreSQL + pgvector)
-- **Interactive Brokers TWS** or **IB Gateway** running on `127.0.0.1:7497`
+- **Interactive Brokers TWS** (port `7497`) or **IB Gateway** (port `4002`) running on `127.0.0.1`
 - An **xAI (Grok)** API key
 
 ---
@@ -290,7 +272,7 @@ DATABASE_URL=postgresql://user:change_me@localhost:5432/db_name
 
 > **Important:** The `DATABASE_URL` credentials must match the `POSTGRES_*` values.
 
-Optional IBKR runtime connection settings are defined in `config.json` under `ibkr`.
+Optional IBKR runtime connection settings are defined in `config.yaml` under `ibkr`.
 
 ### 2. Start the database
 
@@ -310,7 +292,7 @@ pip install -r requirements.txt
 
 ### 4. Launch IBKR TWS / IB Gateway
 
-Make sure TWS or IB Gateway is running and configured to accept API connections on port `7497`.
+Make sure TWS or IB Gateway is running and configured to accept API connections. Default ports: `7497` (TWS) or `4002` (IB Gateway). Update `ibkr.port` in `config.yaml` accordingly.
 
 ### 5. Start ZETA
 
@@ -319,9 +301,7 @@ cd script
 python main.py
 ```
 
-With this command, runtime config is read/written in `script/config.json`.
-
-If you run ZETA from the repository root (for example `python script/main.py`), runtime config is read/written in `config.json` at repository root.
+`config.yaml` is always loaded from the repository root regardless of the working directory (path is resolved at import time in `script/config.py`).
 
 ZETA will:
 
@@ -333,7 +313,7 @@ ZETA will:
 
 ## Dry Run Mode
 
-By enabling `"dry_run": true` in `config.json`, ZETA operates in simulation mode:
+By enabling `dry_run: true` in `config.yaml`, ZETA operates in simulation mode:
 
 - The IBKR connection is established but **no real orders are placed**
 - Orders return a `DRY_RUN` status with details of what would have been executed
@@ -402,7 +382,7 @@ Notes:
 | Embeddings | `intfloat/e5-large-v2` (default) |
 | Validation | Pydantic v2 |
 | Logging | `colorlog` (level-based colored logs) |
-| Configuration | JSON with hot-reload |
+| Configuration | YAML with hot-reload (`watchdog`) |
 | Containerization | Docker Compose |
 
 ---
@@ -413,7 +393,7 @@ Notes:
 - `test_tools/tool_runner.py` — run one tool manually for debugging
 - `test_tools/run_viewer.py` — inspect run history from the database
 - `test_tools/memory_manager.py` — inspect/manage memory entries
-- `test_tools/chat_grok.py` — ad-hoc Grok chat testing
+- `test_tools/chat_with_llm.py` — ad-hoc LLM chat testing
 - `test_tools/db_export_runs.py` — export DB runs/messages/tools/memory events to JSON
 
 ---

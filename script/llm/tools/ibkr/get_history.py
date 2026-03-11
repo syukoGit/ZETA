@@ -9,7 +9,6 @@ from llm.tools.base import register_tool
 
 class GetHistoryArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
-    sec_type: Optional[str] = Field(None, description="IB contract type: STK (stock/ETF) or IND (index). If omitted, auto-detection is attempted.")
     exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for stocks. For indices, provide the listing exchange (e.g. CBOE for VIX).")
     currency: str = Field("USD", min_length=1)
     duration: str = Field("2 D", description='The amount of time to go back from the request\'s given end date and time', pattern="^([1-9][0-9]* (S|D|W|M|Y))+$")
@@ -30,7 +29,6 @@ async def get_history(args: Dict[str, Any]) -> Dict[str, Any]:
             ibTools.ib,
             {
                 "symbol": a.symbol,
-                "sec_type": a.sec_type,
                 "exchange": a.exchange,
                 "currency": a.currency,
             },

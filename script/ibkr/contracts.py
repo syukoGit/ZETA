@@ -116,26 +116,7 @@ def parse_contract_args(data: Dict[str, Any]) -> _BaseContractArgs:
 
 
 async def qualify_contract(ib: IB, data: Dict[str, Any]) -> Tuple[Contract, str]:
-    """Build, validate and qualify an IBKR contract from a field dict.
-
-    If sec_type is provided the matching model is used directly and any
-    validation error is raised immediately.  If sec_type is absent, each type
-    in AUTO_DETECT_ORDER is tried in sequence: Pydantic validation failures
-    (missing required fields, bad constraints) are silently skipped; the first
-    successful IB qualification is returned.
-    """
-    sec_type = data.get("sec_type")
-
-    if sec_type:
-        contract_args = parse_contract_args(data)
-        candidate = contract_args.to_ib_contract()
-        qualified = await ib.qualifyContractsAsync(candidate)
-        if not qualified or qualified[0] is None:
-            raise ValueError(
-                f"Could not qualify contract: symbol={data.get('symbol')} sec_type={sec_type.upper()}"
-            )
-        q = qualified[0]
-        return q, getattr(q, "secType", sec_type.upper())
+    data = {k: v for k, v in data.items() if k != "sec_type"}
 
     # --- auto-detection ---
     ib_failures: List[str] = []

@@ -2,18 +2,29 @@ import asyncio
 import sys
 from datetime import datetime, timezone
 
-from config import config
 from logger import get_logger
+from phase_resolver import get_current_phase
 from utils.market_status import parse_market_snapshot
 
 logger = get_logger(__name__)
 
 
+_FALLBACK_MAX_WAIT = 3600
+_FALLBACK_MIN_WAIT = 60
+
+
 def _off_hours_wait() -> int:
-    return config().off_hours_wait_seconds
+    try:
+        return get_current_phase().config.run_interval.max
+    except RuntimeError:
+        return _FALLBACK_MAX_WAIT
+
 
 def _min_wait() -> int:
-    return config().min_wait_seconds
+    try:
+        return get_current_phase().config.run_interval.min
+    except RuntimeError:
+        return _FALLBACK_MIN_WAIT
 
 
 def is_trading_hours(now: datetime = None) -> bool:
@@ -76,7 +87,8 @@ def get_wait_time(time_before_next_run: int) -> int:
             wait = int(seconds_until_close)
             logger.debug(
                 "Adjusted to %ds to not exceed market close at %s",
-                wait, latest_close.strftime("%H:%M"),
+                wait,
+                latest_close.strftime("%H:%M"),
             )
             return max(_min_wait(), wait)
 
@@ -86,21 +98,23 @@ def get_wait_time(time_before_next_run: int) -> int:
 async def countdown_display(wait_seconds: int) -> None:
     """
     Display a countdown in the console.
-    
+
     Args:
         wait_seconds: Number of seconds to wait.
     """
     current_hour = datetime.now(timezone.utc).strftime("%H:%M")
     remaining = wait_seconds
-    
+
     while remaining > 0:
         mins, secs = divmod(remaining, 60)
-        status_msg = f"\r⏳ {current_hour} - Next call in {int(mins):02d}:{int(secs):02d}  "
+        status_msg = (
+            f"\r⏳ {current_hour} - Next call in {int(mins):02d}:{int(secs):02d}  "
+        )
         sys.stdout.write(status_msg)
         sys.stdout.flush()
-        
+
         await asyncio.sleep(1)
         remaining -= 1
-    
+
     # New line after the countdown
     print()
