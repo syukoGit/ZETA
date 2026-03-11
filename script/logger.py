@@ -12,7 +12,7 @@ _IB_200_RE = re.compile(r"\bError\s+200\b", re.IGNORECASE)
 
 class _DropIB200UnknownContractFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.name != "ib_async.wrapper":
+        if record.name != "ib_async.wrapper" and record.name != "ib_async.ib":
             return True
 
         msg = record.getMessage()
