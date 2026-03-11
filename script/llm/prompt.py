@@ -16,4 +16,6 @@ def get_prompt(prompt_name: str) -> str:
             return content
     except FileNotFoundError:
         logger.error("Prompt file not found: %s", prompt_file)
+    except IsADirectoryError:
+        logger.error("No prompt file found")
     return ""
