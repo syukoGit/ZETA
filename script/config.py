@@ -5,7 +5,7 @@ import logging
 import threading
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -168,6 +168,7 @@ class IBKRConfig(BaseModel):
     min_cash_reserve: float = 500.0
     cash_reserve_currency: str = "USD"
     excluded_cash_currencies: list[str] = Field(default_factory=list)
+    ind_registry: Dict[str, str] = Field(default_factory=dict)
 
 
 class SnapshotIndex(BaseModel):
