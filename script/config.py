@@ -157,7 +157,7 @@ class PhasesConfig(BaseModel):
             ),
             review=override.review if override.review is not None else d.review,
             tools=override.tools if override.tools is not None else d.tools,
-            prompt_file=override.prompt_file,
+            prompt_file=override.prompt_file or d.prompt_file,
         )
 
 
