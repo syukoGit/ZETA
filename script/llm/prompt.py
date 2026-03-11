@@ -9,7 +9,18 @@ _PROMPTS_DIR = _PROJECT_ROOT / "prompts"
 
 
 def get_prompt(prompt_name: str) -> str:
-    prompt_file = _PROMPTS_DIR / f"{prompt_name}"
+    base_dir = _PROMPTS_DIR.resolve()
+    try:
+        prompt_file = (base_dir / prompt_name).resolve()
+    except OSError as exc:
+        logger.error("Failed to resolve prompt file path for %s: %s", prompt_name, exc)
+        return ""
+
+    # Ensure the resolved prompt file is within the prompts directory to prevent path traversal.
+    if base_dir not in prompt_file.parents:
+        logger.error("Invalid prompt name outside prompts directory: %s", prompt_name)
+        return ""
+
     try:
         content = prompt_file.read_text(encoding="utf-8")
         if content:
