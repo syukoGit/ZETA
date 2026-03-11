@@ -58,6 +58,23 @@ def setup_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
+_PROGRESS_PREFIX = "\033[32m[PROGRESS]\033[0m"
+_PROGRESS_PADDING = (
+    " " * 20
+)  # Overwrite any leftover characters from a longer previous message
+
+
+def log_progress(message: str) -> None:
+    """Write an in-place progress line using \r so it overwrites the current terminal line."""
+    sys.stdout.write(f"\r{_PROGRESS_PREFIX} {message}{_PROGRESS_PADDING}")
+    sys.stdout.flush()
+
+
+def log_progress_end() -> None:
+    """Finalize the in-place progress line by advancing to the next line."""
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+
 def get_logger(name: str) -> logging.Logger:
-    """Return a named logger (convention: __name__)."""
     return logging.getLogger(name)
