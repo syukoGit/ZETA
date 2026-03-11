@@ -32,18 +32,19 @@ async def _fetch_ticker(symbol: str, exchange: str, currency: str) -> Optional[T
         ibtools = IBTools.get_instance()
         ib = ibtools.ib
 
-        contract = Contract(
-            secType="IND", symbol=symbol, exchange=exchange, currency=currency
-        )
-        await ib.qualifyContractsAsync(contract)
+        async with ibtools.ib_sem:
+            contract = Contract(
+                secType="IND", symbol=symbol, exchange=exchange, currency=currency
+            )
+            await ib.qualifyContractsAsync(contract)
 
-        ib.reqMarketDataType(
-            3
-        )  # delayed — reliable for indices without live subscription
-        tickers = await asyncio.wait_for(
-            ib.reqTickersAsync(contract, regulatorySnapshot=False),
-            timeout=_VOLATILITY_FETCH_TIMEOUT_S,
-        )
+            ib.reqMarketDataType(
+                3
+            )  # delayed — reliable for indices without live subscription
+            tickers = await asyncio.wait_for(
+                ib.reqTickersAsync(contract, regulatorySnapshot=False),
+                timeout=_VOLATILITY_FETCH_TIMEOUT_S,
+            )
         if not tickers:
             logger.warning("phase_resolver: no ticker returned for %s", symbol)
             return None
