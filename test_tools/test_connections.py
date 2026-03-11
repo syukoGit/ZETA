@@ -4,6 +4,7 @@ init()
 
 import argparse
 import asyncio
+import sys
 
 from test_tools.tools_utils.check_connections import test_database, test_ibkr
 from test_tools.tools_utils.display import *
@@ -43,6 +44,7 @@ async def _main() -> None:
         print(f"{GREEN}{BOLD}All connection tests passed.")
     else:
         print(f"{RED}{BOLD}Some connection tests failed.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
