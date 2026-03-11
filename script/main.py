@@ -15,11 +15,56 @@ from utils.timing import get_wait_time, countdown_display
 logger = get_logger(__name__)
 
 
+def _recover_previous_state(dbTools: DBTools):
+    previous_reporting = None
+    last_review_reporting = None
+
+    try:
+        last_review_runs = dbTools.get_filtered_runs(
+            trigger_type="review", status="completed", limit=1
+        )
+        if last_review_runs:
+            review_run = dbTools.get_run_by_id(last_review_runs[0].id)
+            if review_run:
+                for msg in review_run.messages:
+                    for tc in msg.tool_calls:
+                        if tc.tool_name == "close_review" and tc.output_payload:
+                            last_review_reporting = tc.output_payload
+                            break
+                    if last_review_reporting:
+                        break
+    except Exception as e:
+        logger.warning("Could not restore last_review_reporting from DB: %s", e)
+
+    try:
+        last_llm_runs = dbTools.get_filtered_runs(
+            trigger_type="llm_call", status="completed", limit=1
+        )
+        if last_llm_runs:
+            llm_run = dbTools.get_run_by_id(last_llm_runs[0].id)
+            if llm_run:
+                for msg in llm_run.messages:
+                    for tc in msg.tool_calls:
+                        if tc.tool_name == "close_run" and tc.output_payload:
+                            previous_reporting = tc.output_payload.get("summary")
+                            break
+                    if previous_reporting:
+                        break
+    except Exception as e:
+        logger.warning("Could not restore previous_reporting from DB: %s", e)
+
+    logger.info(
+        "Restored session state: previous_reporting=%s, last_review=%s",
+        "yes" if previous_reporting else "no",
+        "yes" if last_review_reporting else "no",
+    )
+
+    return previous_reporting, last_review_reporting
+
+
 async def main():
     ib = None
     db = None
-    previous_reporting = None
-    last_review_reporting = None
     time_before_next_run = None
 
     load_dotenv()
@@ -36,6 +81,8 @@ async def main():
 
     dbTools = DBTools()
     logger.info("Database initialized and session started.")
+
+    previous_reporting, last_review_reporting = _recover_previous_state(dbTools)
 
     dry_run = config().dry_run
     if dry_run:
