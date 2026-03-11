@@ -15,20 +15,6 @@ EXCHANGES_CALENDARS: Dict[str, str] = {
 def get_next_session_open(
     calendar: xc.ExchangeCalendar, now: datetime
 ) -> datetime | None:
-    """
-    Find the next session open time from a given datetime.
-
-    Works correctly even on non-trading days (weekends, holidays).
-    If the market is currently open, returns the next session after the current one.
-    If the market is closed but today's session hasn't opened yet, returns today's open.
-
-    Args:
-        calendar: An exchange_calendars calendar instance.
-        now: The current datetime (timezone-aware, UTC).
-
-    Returns:
-        The next session open as a timezone-aware datetime, or None if not found.
-    """
     today = pd.Timestamp(now.date())
     session = calendar.date_to_session(today, direction="next")
     open_time = calendar.session_open(session)
@@ -43,18 +29,6 @@ def get_next_session_open(
 
 
 def get_market_status(now: datetime) -> Dict[str, Any]:
-    """
-    Return the open/closed status and timing info for each monitored exchange.
-
-    Args:
-        now: The current datetime (timezone-aware, UTC).
-
-    Returns:
-        A dict keyed by exchange name, each value containing:
-            - status: "OPEN", "CLOSED", or "UNKNOWN"
-            - closes_at_utc: str (HH:MM) if OPEN
-            - next_session_open_utc: str (YYYY-MM-DD HH:MM)
-    """
     statuses = {}
     ts = now.astimezone(timezone.utc)
 
@@ -92,16 +66,6 @@ def get_market_status(now: datetime) -> Dict[str, Any]:
 
 
 def parse_market_snapshot(now: datetime = None) -> dict:
-    """
-    Get the market status snapshot and derive useful timing info.
-
-    Returns a dict with:
-        - any_open: bool
-        - earliest_current_open: datetime | None  (earliest open time among currently-open exchanges)
-        - soonest_close: datetime | None           (soonest close among currently-open exchanges)
-        - latest_close: datetime | None            (latest close among currently-open exchanges)
-        - earliest_next_open: datetime | None      (soonest next open across all exchanges)
-    """
     if now is None:
         now = datetime.now(timezone.utc)
 
