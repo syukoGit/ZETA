@@ -17,11 +17,10 @@ class _DropIB200UnknownContractFilter(logging.Filter):
 
         msg = record.getMessage()
         is_error_200 = bool(_IB_200_RE.search(msg))
-        is_unknown_contract = (
-            "Unknown contract" in msg or "ib_async.wrapper: Error 200" in msg
-        )
+        is_error_txt = "ib_async.wrapper: Error 200" in msg
+        is_unknown_contract = "ib_async.ib: Unknown contract" in msg
 
-        if is_error_200 and is_unknown_contract:
+        if is_error_200 or is_error_txt or is_unknown_contract:
             return False
         return True
 
