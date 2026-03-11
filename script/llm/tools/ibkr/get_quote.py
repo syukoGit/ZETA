@@ -17,11 +17,12 @@ logger = get_logger(__name__)
 _FALLBACK_DATA_TYPES: Dict[int, List[int]] = {
     1: [3, 4],  # real-time → delayed → delayed-frozen
     2: [4, 3],  # frozen → delayed-frozen → delayed
-    3: [4],     # delayed → delayed-frozen
-    4: [3],     # delayed-frozen → delayed
+    3: [4],  # delayed → delayed-frozen
+    4: [3],  # delayed-frozen → delayed
 }
 
 MIN_TIMEOUT_S = 14.0
+
 
 def _get_data_type_name(mdt: int) -> str:
     return {
@@ -31,12 +32,24 @@ def _get_data_type_name(mdt: int) -> str:
         4: "DELAYED-FROZEN",
     }.get(mdt, f"UNKNOWN({mdt})")
 
+
 class GetQuoteArgs(BaseModel):
     symbol: str = Field(..., min_length=1, description="Ticker")
     currency: str = Field("USD", min_length=1, description="Currency code")
-    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for stocks. For indices, provide the listing exchange (e.g. CBOE for VIX).")
-    timeout_s: float = Field(30.0, gt=MIN_TIMEOUT_S, description="Timeout for quote fetch (clamped to 15s minimum)")
-    market_data_type: int = Field(1, description="IB market data type (1=real-time, 2=frozen, 3=delayed, 4=delayed-frozen). Default 3 (delayed) for reliability.")
+    exchange: str = Field(
+        ...,
+        min_length=1,
+        description="Exchange code. SMART is allowed only for stocks to choose the best exchange. If the symbol is an index or may resolve to an index (IND), you MUST provide the real listing exchange and you MUST NOT use SMART. For indices, SMART is invalid and often fails. Examples: VIX -> CBOE, SPX -> CBOE, NDX -> NASDAQ.",
+    )
+    timeout_s: float = Field(
+        30.0,
+        gt=MIN_TIMEOUT_S,
+        description="Timeout for quote fetch (clamped to 15s minimum)",
+    )
+    market_data_type: int = Field(
+        1,
+        description="IB market data type (1=real-time, 2=frozen, 3=delayed, 4=delayed-frozen). Default 3 (delayed) for reliability.",
+    )
     regulatory_snapshot: bool = Field(False)
 
 
@@ -58,15 +71,24 @@ async def _request_snapshot(
             )
             if has_data:
                 return t
-            logger.warning("Ticker returned but no meaningful price fields for contract %s", contract.symbol)
+            logger.warning(
+                "Ticker returned but no meaningful price fields for contract %s",
+                contract.symbol,
+            )
             return None
         return None
     except asyncio.TimeoutError:
-        logger.warning("reqTickersAsync timed out after %.1fs for %s", timeout_s, contract.symbol)
+        logger.warning(
+            "reqTickersAsync timed out after %.1fs for %s", timeout_s, contract.symbol
+        )
         return None
 
 
-@register_tool("get_quote", description="Retrieve market data quote for a given contract. Uses automatic fallback across market data types if the requested type times out.", args_model=GetQuoteArgs)
+@register_tool(
+    "get_quote",
+    description="Retrieve market data quote for a given contract. Uses automatic fallback across market data types if the requested type times out.",
+    args_model=GetQuoteArgs,
+)
 async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
     a = GetQuoteArgs(**args)
 
@@ -75,7 +97,6 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
 
     ibTools = IBTools.get_instance()
     ib = ibTools.ib
-
 
     async with ibTools.ib_sem:
         q, resolved_sec_type = await qualify_contract(
@@ -88,10 +109,14 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
         )
 
         if resolved_sec_type == "IND":
-            a.market_data_type = 3  # Force delayed for indices, as real-time is often unavailable
+            a.market_data_type = (
+                3  # Force delayed for indices, as real-time is often unavailable
+            )
 
         # --- Build the ordered list of market_data_types to try ---
-        types_to_try = [a.market_data_type] + _FALLBACK_DATA_TYPES.get(a.market_data_type, [])
+        types_to_try = [a.market_data_type] + _FALLBACK_DATA_TYPES.get(
+            a.market_data_type, []
+        )
 
         last_error: Optional[str] = None
         used_data_type: Optional[int] = None
@@ -99,15 +124,21 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
         for mdt in types_to_try:
             logger.debug(
                 "get_quote %s: trying market_data_type=%d, timeout=%.1fs",
-                a.symbol, mdt, effective_timeout,
+                a.symbol,
+                mdt,
+                effective_timeout,
             )
             ib.reqMarketDataType(mdt)
 
             try:
-                t = await _request_snapshot(ibTools.ib, q, effective_timeout, a.regulatory_snapshot)
+                t = await _request_snapshot(
+                    ibTools.ib, q, effective_timeout, a.regulatory_snapshot
+                )
             except Exception as e:
                 last_error = str(e)
-                logger.error("get_quote %s error with mdt=%d: %s", a.symbol, mdt, last_error)
+                logger.error(
+                    "get_quote %s error with mdt=%d: %s", a.symbol, mdt, last_error
+                )
                 continue
 
             if t is not None:
@@ -115,7 +146,10 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
                 break
         else:
             # All attempts exhausted
-            logger.warning("get_quote %s: all market_data_types exhausted, returning TIMEOUT", a.symbol)
+            logger.warning(
+                "get_quote %s: all market_data_types exhausted, returning TIMEOUT",
+                a.symbol,
+            )
             return {
                 "status": "TIMEOUT",
                 "asOf": datetime.now(timezone.utc).isoformat(),
@@ -155,7 +189,9 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
             "exchange": getattr(q, "exchange", a.exchange),
             "primaryExchange": getattr(q, "primaryExchange", None),
             "currency": getattr(q, "currency", a.currency),
-            "marketDataType": _get_data_type_name(used_data_type) if used_data_type else None,
+            "marketDataType": (
+                _get_data_type_name(used_data_type) if used_data_type else None
+            ),
             "regulatorySnapshot": a.regulatory_snapshot,
             "bid": bid,
             "ask": ask,
