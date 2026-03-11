@@ -225,9 +225,10 @@ async def refresh_phase(now: datetime = None) -> ResolvedPhase:
     global _current_phase
     previous_phase = _current_phase.phase.value if _current_phase else "Not defined"
     _current_phase = await resolve_phase(now)
-    logger.info(
-        "Phase changed from %s to %s", previous_phase, _current_phase.phase.value
-    )
+    if previous_phase != _current_phase.phase.value:
+        logger.info(
+            "Phase changed from %s to %s", previous_phase, _current_phase.phase.value
+        )
     return _current_phase
 
 
