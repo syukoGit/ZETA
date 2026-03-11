@@ -9,7 +9,12 @@ from typing import Optional
 import yaml
 from pydantic import BaseModel, Field
 from pydantic import ConfigDict
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent
+from watchdog.events import (
+    FileCreatedEvent,
+    FileModifiedEvent,
+    FileMovedEvent,
+    FileSystemEventHandler,
+)
 from watchdog.observers import Observer
 
 logger = logging.getLogger(__name__)
@@ -219,6 +224,14 @@ def _reload_config() -> None:
 class _ConfigFileHandler(FileSystemEventHandler):
     def on_modified(self, event: FileModifiedEvent) -> None:
         if Path(event.src_path).resolve() == _CONFIG_PATH.resolve():
+            _reload_config()
+
+    def on_created(self, event: FileCreatedEvent) -> None:
+        if Path(event.src_path).resolve() == _CONFIG_PATH.resolve():
+            _reload_config()
+
+    def on_moved(self, event: FileMovedEvent) -> None:
+        if Path(event.dest_path).resolve() == _CONFIG_PATH.resolve():
             _reload_config()
 
 
