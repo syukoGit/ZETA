@@ -14,12 +14,13 @@ class _DropIB200UnknownContractFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.name != "ib_async.wrapper":
             return True
-        
+
         msg = record.getMessage()
         is_error_200 = bool(_IB_200_RE.search(msg))
-        is_unknown_contract = "Unknown contract" in msg
+        is_error_txt = "ib_async.wrapper: Error 200" in msg
+        is_unknown_contract = "ib_async.ib: Unknown contract" in msg
 
-        if is_error_200 and is_unknown_contract:
+        if is_error_200 or is_error_txt or is_unknown_contract:
             return False
         return True
 
@@ -42,10 +43,10 @@ def setup_logging() -> None:
         fmt="%(asctime)s %(log_color)s[%(levelname)s]%(reset)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         log_colors={
-            "DEBUG":    "cyan",
-            "INFO":     "green",
-            "WARNING":  "yellow",
-            "ERROR":    "red",
+            "DEBUG": "cyan",
+            "INFO": "green",
+            "WARNING": "yellow",
+            "ERROR": "red",
             "CRITICAL": "bold_red",
         },
     )
