@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import time
 import logging
 import threading
 from enum import Enum
@@ -7,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic import ConfigDict
 from watchdog.events import (
     FileCreatedEvent,
@@ -34,6 +35,12 @@ class ReviewConfig(BaseModel):
 class RunIntervalConfig(BaseModel):
     min: int = 60
     max: int = 300
+
+    @model_validator(mode="after")
+    def validate_interval(self):
+        if self.min > self.max:
+            raise ValueError("run_interval min cannot be greater than max")
+        return self
 
 
 class PhaseToolsConfig(BaseModel):
@@ -73,6 +80,16 @@ class PreMarketConfig(BaseModel):
         description="End of the pre-market window in UTC (HH:MM, exclusive)",
         pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$",
     )
+
+    @model_validator(mode="after")
+    def validate_time_window(self):
+        h_s, m_s = map(int, self.start_utc.split(":"))
+        h_e, m_e = map(int, self.end_utc.split(":"))
+        start = time(h_s, m_s)
+        end = time(h_e, m_e)
+        if start >= end:
+            raise ValueError("pre_market start_utc must be before end_utc")
+        return self
 
 
 class WindowConfig(BaseModel):
@@ -147,7 +164,7 @@ class PhasesConfig(BaseModel):
 class IBKRConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4002
-    client_id: int = 0
+    client_id: int = Field(default=0, alias="clientId")
     min_cash_reserve: float = 500.0
     cash_reserve_currency: str = "USD"
     excluded_cash_currencies: list[str] = Field(default_factory=list)
