@@ -1,277 +1,264 @@
-import json
+from __future__ import annotations
+
+from datetime import time
 import logging
-from dataclasses import dataclass
+import threading
+from enum import Enum
 from pathlib import Path
-from threading import Lock
+from typing import Optional
 
-_CONFIG_FILENAME = "config.json"
-_config_cache: "AppConfig | None" = None
-_last_mtime_ns: int = -1
-_lock = Lock()
-_logger = logging.getLogger(__name__)
+import yaml
+from pydantic import BaseModel, Field, model_validator
+from pydantic import ConfigDict
+from watchdog.events import (
+    FileCreatedEvent,
+    FileModifiedEvent,
+    FileMovedEvent,
+    FileSystemEventHandler,
+)
+from watchdog.observers import Observer
 
+logger = logging.getLogger(__name__)
 
-class ConfigError(RuntimeError):
-    """Raised when configuration is missing or invalid."""
-
-def _fk(path: str, key: str) -> str:
-    return f"{path}.{key}" if path else key
-
-
-def _require_bool(d: dict, key: str, path: str) -> bool:
-    v = d.get(key)
-    if not isinstance(v, bool):
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be a boolean")
-    return v
+_CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
 
 
-def _require_str(d: dict, key: str, path: str) -> str:
-    v = d.get(key)
-    if not isinstance(v, str) or not v.strip():
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be a non-empty string")
-    return v
+class LLMConfig(BaseModel):
+    provider: str = "grok"
+    model: str = "grok-4-1-fast-reasoning"
 
 
-def _require_int(
-    d: dict,
-    key: str,
-    path: str,
-    *,
-    min_value: int | None = None,
-    max_value: int | None = None,
-) -> int:
-    v = d.get(key)
-    if not isinstance(v, int) or isinstance(v, bool):
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be an integer")
-    if min_value is not None and v < min_value:
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be >= {min_value}")
-    if max_value is not None and v > max_value:
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be <= {max_value}")
-    return v
+class ReviewConfig(BaseModel):
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
 
-def _require_number(d: dict, key: str, path: str) -> float:
-    v = d.get(key)
-    if not isinstance(v, (int, float)) or isinstance(v, bool):
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be a number")
-    return float(v)
+class RunIntervalConfig(BaseModel):
+    min: int = 60
+    max: int = 300
+
+    @model_validator(mode="after")
+    def validate_interval(self):
+        if self.min > self.max:
+            raise ValueError("run_interval min cannot be greater than max")
+        return self
 
 
-def _require_dict(d: dict, key: str, path: str) -> dict:
-    v = d.get(key)
-    if not isinstance(v, dict):
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be an object")
-    return v
+class PhaseToolsConfig(BaseModel):
+    disable: list[str] = Field(default_factory=list)
 
 
-def _require_str_list(d: dict, key: str, path: str) -> list[str]:
-    v = d.get(key)
-    if not isinstance(v, list) or any(not isinstance(item, str) for item in v):
-        raise ConfigError(f"Invalid config: '{_fk(path, key)}' must be an array of strings")
-    return v
+class PhaseReviewConfig(BaseModel):
+    runs_before_review: int = 15
 
 
-@dataclass(frozen=True)
-class LLMConfig:
-    provider: str
-    model: str
+class DefaultPhaseConfig(BaseModel):
+    run_interval: RunIntervalConfig = Field(default_factory=RunIntervalConfig)
+    review: PhaseReviewConfig = Field(default_factory=PhaseReviewConfig)
+    tools: PhaseToolsConfig = Field(default_factory=PhaseToolsConfig)
 
-    @classmethod
-    def from_dict(cls, d: dict, path: str) -> "LLMConfig":
-        return cls(
-            provider=_require_str(d, "provider", path),
-            model=_require_str(d, "model", path),
+
+class PhaseOverrideConfig(BaseModel):
+    run_interval: Optional[RunIntervalConfig] = None
+    review: Optional[PhaseReviewConfig] = None
+    tools: Optional[PhaseToolsConfig] = None
+    prompt_file: str = ""
+
+
+class HighVolatilityTrigger(BaseModel):
+    vix_above: Optional[float] = None
+    index_move_pct: Optional[float] = None
+
+
+class PreMarketConfig(BaseModel):
+    start_utc: str = Field(
+        default="12:00",
+        description="Start of the pre-market window in UTC (HH:MM)",
+        pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$",
+    )
+    end_utc: str = Field(
+        default="13:30",
+        description="End of the pre-market window in UTC (HH:MM, exclusive)",
+        pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$",
+    )
+
+    @model_validator(mode="after")
+    def validate_time_window(self):
+        h_s, m_s = map(int, self.start_utc.split(":"))
+        h_e, m_e = map(int, self.end_utc.split(":"))
+        start = time(h_s, m_s)
+        end = time(h_e, m_e)
+        if start >= end:
+            raise ValueError("pre_market start_utc must be before end_utc")
+        return self
+
+
+class WindowConfig(BaseModel):
+    window_minutes: int = Field(
+        default=30, gt=0, description="Duration of the window in minutes"
+    )
+
+
+class HighVolatilityResolverConfig(BaseModel):
+    triggers: list[HighVolatilityTrigger] = Field(default_factory=list)
+
+
+class PhaseConfig(BaseModel):
+    off_market_short_threshold_hours: int = Field(
+        default=6,
+        gt=0,
+        description="Hours before next open below which OFF_MARKET_SHORT is active",
+    )
+    pre_market: PreMarketConfig = Field(default_factory=PreMarketConfig)
+    opening_window: WindowConfig = Field(default_factory=WindowConfig)
+    closing_window: WindowConfig = Field(default_factory=WindowConfig)
+    high_volatility: HighVolatilityResolverConfig = Field(
+        default_factory=HighVolatilityResolverConfig
+    )
+
+
+class ResolvedPhaseConfig(BaseModel):
+    run_interval: RunIntervalConfig
+    review: PhaseReviewConfig
+    tools: PhaseToolsConfig
+    prompt_file: str
+
+
+class Phase(str, Enum):
+    PRE_MARKET = "PRE_MARKET"
+    OPENING_WINDOW = "OPENING_WINDOW"
+    MARKET_SESSION = "MARKET_SESSION"
+    CLOSING_WINDOW = "CLOSING_WINDOW"
+    OFF_MARKET_SHORT = "OFF_MARKET_SHORT"
+    OFF_MARKET_LONG = "OFF_MARKET_LONG"
+    HIGH_VOLATILITY = "HIGH_VOLATILITY"
+
+
+class PhasesConfig(BaseModel):
+    default: DefaultPhaseConfig = Field(default_factory=DefaultPhaseConfig)
+    PRE_MARKET: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    OPENING_WINDOW: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    MARKET_SESSION: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    CLOSING_WINDOW: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    OFF_MARKET_SHORT: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    OFF_MARKET_LONG: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+    HIGH_VOLATILITY: PhaseOverrideConfig = Field(default_factory=PhaseOverrideConfig)
+
+    def resolved_phase(self, phase: Phase | str) -> ResolvedPhaseConfig:
+        """Merge default config with the phase override (phase wins on non-None fields)."""
+        phase_name = phase.value if isinstance(phase, Phase) else phase
+        override: PhaseOverrideConfig = getattr(self, phase_name)
+        d = self.default
+
+        return ResolvedPhaseConfig(
+            run_interval=(
+                override.run_interval
+                if override.run_interval is not None
+                else d.run_interval
+            ),
+            review=override.review if override.review is not None else d.review,
+            tools=override.tools if override.tools is not None else d.tools,
+            prompt_file=override.prompt_file,
         )
 
 
-@dataclass(frozen=True)
-class ReviewConfig:
-    llm: LLMConfig
-    every_n_trades: int
-
-    @classmethod
-    def from_dict(cls, d: dict, path: str = "review") -> "ReviewConfig":
-        return cls(
-            llm=LLMConfig.from_dict(_require_dict(d, "llm", path), path=f"{path}.llm"),
-            every_n_trades=_require_int(d, "every_n_trades", path, min_value=1),
-        )
+class IBKRConfig(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 4002
+    client_id: int = Field(default=0, alias="clientId")
+    min_cash_reserve: float = 500.0
+    cash_reserve_currency: str = "USD"
+    excluded_cash_currencies: list[str] = Field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class SnapshotIndexConfig:
+class SnapshotIndex(BaseModel):
     symbol: str
     exchange: str
-    currency: str
-
-    @classmethod
-    def from_dict(cls, d: dict, path: str) -> "SnapshotIndexConfig":
-        symbol = _require_str(d, "symbol", path)
-        exchange = _require_str(d, "exchange", path)
-        currency = d.get("currency", "USD")
-        if not isinstance(currency, str) or not currency.strip():
-            raise ConfigError(f"Invalid config: '{_fk(path, 'currency')}' must be a non-empty string")
-        return cls(symbol=symbol, exchange=exchange, currency=currency)
+    currency: str = "USD"
 
 
-@dataclass(frozen=True)
-class SnapshotConfig:
-    indices: tuple["SnapshotIndexConfig", ...]
-
-    @classmethod
-    def from_dict(cls, d: dict, path: str = "snapshot") -> "SnapshotConfig":
-        raw = d.get("indices")
-        if not isinstance(raw, list):
-            raise ConfigError(f"Invalid config: '{_fk(path, 'indices')}' must be an array")
-        indices_list = []
-        for i, item in enumerate(raw):
-            if not isinstance(item, dict):
-                raise ConfigError(f"Invalid config: '{path}.indices[{i}]' must be an object")
-            indices_list.append(SnapshotIndexConfig.from_dict(item, path=f"{path}.indices[{i}]"))
-        return cls(indices=tuple(indices_list))
+class SnapshotConfig(BaseModel):
+    indices: list[SnapshotIndex] = Field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class IBKRConfig:
-    host: str
-    port: int
-    client_id: int
-    min_cash_reserve: float
-    cash_reserve_currency: str
-    excluded_cash_currencies: tuple[str, ...]
+class AppConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
 
-    @classmethod
-    def from_dict(cls, d: dict, path: str = "ibkr") -> "IBKRConfig":
-        return cls(
-            host=_require_str(d, "host", path),
-            port=_require_int(d, "port", path, min_value=1, max_value=65535),
-            client_id=_require_int(d, "clientId", path, min_value=0),
-            min_cash_reserve=_require_number(d, "min_cash_reserve", path),
-            cash_reserve_currency=_require_str(d, "cash_reserve_currency", path),
-            excluded_cash_currencies=tuple(_require_str_list(d, "excluded_cash_currencies", path)),
+    debug_print: bool = Field(default=False, alias="debugPrint")
+    dry_run: bool = True
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
+    embedding_model: str = "sentence-transformers/nli-bert-large"
+    ibkr: IBKRConfig = Field(default_factory=IBKRConfig)
+    snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
+    phases: PhasesConfig = Field(default_factory=PhasesConfig)
+    phase_config: PhaseConfig = Field(default_factory=PhaseConfig)
+
+
+_lock = threading.RLock()
+_current_config: Optional[AppConfig] = None
+
+
+def _load_config() -> AppConfig:
+    if not _CONFIG_PATH.exists():
+        default_cfg = AppConfig()
+        raw_dict = default_cfg.model_dump(by_alias=True, exclude_none=True)
+        _CONFIG_PATH.write_text(
+            yaml.dump(
+                raw_dict, default_flow_style=False, allow_unicode=True, sort_keys=False
+            ),
+            encoding="utf-8",
         )
-
-
-@dataclass(frozen=True)
-class AppConfig:
-    debug_print: bool
-    dry_run: bool
-    min_wait_seconds: int
-    default_wait_seconds: int
-    off_hours_wait_seconds: int
-    embedding_model: str
-    llm: LLMConfig
-    review: ReviewConfig
-    ibkr: IBKRConfig
-    snapshot: SnapshotConfig
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "AppConfig":
-        return cls(
-            debug_print=_require_bool(d, "debugPrint", ""),
-            dry_run=_require_bool(d, "dry_run", ""),
-            min_wait_seconds=_require_int(d, "min_wait_seconds", "", min_value=1),
-            default_wait_seconds=_require_int(d, "default_wait_seconds", "", min_value=1),
-            off_hours_wait_seconds=_require_int(d, "off_hours_wait_seconds", "", min_value=1),
-            embedding_model=_require_str(d, "embedding_model", ""),
-            llm=LLMConfig.from_dict(_require_dict(d, "llm", ""), path="llm"),
-            review=ReviewConfig.from_dict(_require_dict(d, "review", "")),
-            ibkr=IBKRConfig.from_dict(_require_dict(d, "ibkr", "")),
-            snapshot=SnapshotConfig.from_dict(_require_dict(d, "snapshot", "")),
+        logger.warning(
+            "config.yaml not found — created default config at %s", _CONFIG_PATH
         )
-
-_DEFAULT_CONFIG: dict = {
-    "debugPrint": False,
-    "dry_run": True,
-    "min_wait_seconds": 60,
-    "default_wait_seconds": 600,
-    "off_hours_wait_seconds": 3600,
-    "llm": {
-        "provider": "grok",
-        "model": "grok-4-1-fast-reasoning",
-    },
-    "review": {
-        "llm": {
-            "provider": "grok",
-            "model": "grok-4-1-fast-reasoning",
-        },
-        "every_n_trades": 5,
-    },
-    "embedding_model": "sentence-transformers/nli-bert-large",
-    "ibkr": {
-        "host": "127.0.0.1",
-        "port": 7497,
-        "clientId": 0,
-        "min_cash_reserve": 0,
-        "cash_reserve_currency": "BASE",
-        "excluded_cash_currencies": [],
-    },
-    "snapshot": {
-        "indices": [],
-    },
-}
+    with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh)
+    return AppConfig.model_validate(raw)
 
 
-
-def _get_config_path() -> Path:
-    return Path.cwd() / _CONFIG_FILENAME
-
-
-def _write_json_atomic(path: Path, payload: dict) -> None:
-    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=4)
-        f.write("\n")
-    tmp_path.replace(path)
+def config() -> AppConfig:
+    global _current_config
+    if _current_config is None:
+        with _lock:
+            if _current_config is None:
+                _current_config = _load_config()
+                logger.debug("Config loaded from %s", _CONFIG_PATH)
+    return _current_config
 
 
-def _ensure_default_config_exists(path: Path) -> None:
-    if path.exists():
-        return
-    _write_json_atomic(path, _DEFAULT_CONFIG)
-
-def _load_config() -> "AppConfig":
-    global _config_cache, _last_mtime_ns
-
-    config_path = _get_config_path()
-
-    with _lock:
-        _ensure_default_config_exists(config_path)
-
-        try:
-            current_mtime_ns = config_path.stat().st_mtime_ns
-        except OSError as exc:
-            raise ConfigError(
-                f"Unable to access config file '{config_path}' from cwd '{Path.cwd()}': {exc}"
-            ) from exc
-
-        if current_mtime_ns != _last_mtime_ns:
-            previous_mtime_ns = _last_mtime_ns
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-            except json.JSONDecodeError as exc:
-                raise ConfigError(
-                    f"Invalid JSON in config file '{config_path}': {exc}"
-                ) from exc
-            except OSError as exc:
-                raise ConfigError(
-                    f"Unable to read config file '{config_path}' from cwd '{Path.cwd()}': {exc}"
-                ) from exc
-
-            if not isinstance(loaded, dict):
-                raise ConfigError(
-                    f"Invalid config file '{config_path}': root value must be a JSON object"
-                )
-
-            _config_cache = AppConfig.from_dict(loaded)
-            _last_mtime_ns = current_mtime_ns
-            if previous_mtime_ns == -1:
-                _logger.info("Runtime config loaded from %s", config_path)
-            else:
-                _logger.info("Runtime config reloaded from %s", config_path)
-
-    return _config_cache
+def _reload_config() -> None:
+    global _current_config
+    try:
+        new_cfg = _load_config()
+        with _lock:
+            _current_config = new_cfg
+        logger.info("Config reloaded from %s", _CONFIG_PATH)
+    except Exception as exc:
+        logger.error("Config reload failed - keeping previous config. Error: %s", exc)
 
 
-def config() -> "AppConfig":
-    return _load_config()
+# Config file watcher for hot-reloading
+class _ConfigFileHandler(FileSystemEventHandler):
+    def on_modified(self, event: FileModifiedEvent) -> None:
+        if Path(event.src_path).resolve() == _CONFIG_PATH.resolve():
+            _reload_config()
+
+    def on_created(self, event: FileCreatedEvent) -> None:
+        if Path(event.src_path).resolve() == _CONFIG_PATH.resolve():
+            _reload_config()
+
+    def on_moved(self, event: FileMovedEvent) -> None:
+        if Path(event.dest_path).resolve() == _CONFIG_PATH.resolve():
+            _reload_config()
+
+
+def start_config_watcher() -> None:
+    observer = Observer()
+    observer.schedule(
+        _ConfigFileHandler(),
+        path=str(_CONFIG_PATH.parent),
+        recursive=False,
+    )
+    observer.daemon = True
+    observer.start()
+    logger.info("Config watcher started (watching %s)", _CONFIG_PATH)
