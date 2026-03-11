@@ -34,6 +34,10 @@ async def run_llm_call(
         run_prompt = get_prompt(get_current_phase().config.prompt_file)
         if not run_prompt:
             logger.error("No prompt found for the current phase")
+
+            llm.close_chats()
+            dbTools.end_run(run_id, status="failed")
+
             return None, None
 
         llm.add_message("run", run_prompt, role="system")
@@ -154,6 +158,14 @@ async def run_llm_review_call(
 
         # Add initial system prompt to set the context for the LLM
         review_prompt = get_prompt("review_prompt.txt")
+        if not review_prompt:
+            logger.error("No review prompt found")
+
+            llm.close_chats()
+            dbTools.end_run(review_id, status="failed")
+
+            return None
+
         llm.add_message("review", review_prompt, role="system")
         dbTools.add_message(review_id, "system", review_prompt)
 
