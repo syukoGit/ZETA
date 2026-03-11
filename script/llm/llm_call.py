@@ -43,6 +43,11 @@ async def run_llm_call(
         llm.add_message("run", run_prompt, role="system")
         dbTools.add_message(run_id, "system", run_prompt)
 
+        # Provide explicit phase routing context when multiple phases share the same prompt file.
+        current_phase_message = f"CURRENT_PHASE: {get_current_phase().phase.value}"
+        llm.add_message("run", current_phase_message, role="system")
+        dbTools.add_message(run_id, "system", current_phase_message)
+
         # Add last reporting summary to the system prompt for context, if available
         summary_message = (
             "PREVIOUS_SUMMARY: " + dumps_json(previous_reporting)
