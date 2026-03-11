@@ -142,7 +142,7 @@ class PhasesConfig(BaseModel):
 class IBKRConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4002
-    clientId: int = 0
+    client_id: int = 0
     min_cash_reserve: float = 500.0
     cash_reserve_currency: str = "USD"
     excluded_cash_currencies: list[str] = Field(default_factory=list)

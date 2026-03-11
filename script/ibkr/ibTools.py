@@ -13,7 +13,7 @@ async def init_ib_connection(dry_run: bool = True) -> IB:
     ibkr = config().ibkr
     host = ibkr.host
     port = ibkr.port
-    client_id = ibkr.clientId
+    client_id = ibkr.client_id
 
     logger.info("Connecting to IB TWS (%s:%d, clientId=%d)...", host, port, client_id)
     await ib.connectAsync(host, port, clientId=client_id)
