@@ -9,6 +9,7 @@ from logger import get_logger
 from config import LLMConfig
 from llm.llm_provider import LLM, ChatMode, LLMFactory
 from llm.tools.base import get_tools
+from phase_resolver import get_current_phase
 
 logger = get_logger(__name__)
 
@@ -20,9 +21,11 @@ class GrokProvider(LLM):
         super().__init__(config)
         self.client = Client(api_key=os.getenv("LLM_API_KEY"))
 
+        disabled_tools = get_current_phase().config.tools.disable
+
         self._chat_run = self.client.chat.create(
             model=self.model,
-            tools=get_grok_tool("run"),
+            tools=get_grok_tool("run", disabled=disabled_tools),
             store_messages=True,
         )
 
