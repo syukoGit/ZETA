@@ -21,7 +21,11 @@ class GrokProvider(LLM):
         super().__init__(config)
         self.client = Client(api_key=os.getenv("LLM_API_KEY"))
 
-        disabled_tools = get_current_phase().config.tools.disable
+        try:
+            disabled_tools = get_current_phase().config.tools.disable
+        except Exception as e:
+            logger.error("Failed to get disabled tools: %s", e)
+            disabled_tools = []
 
         self._chat_run = self.client.chat.create(
             model=self.model,
