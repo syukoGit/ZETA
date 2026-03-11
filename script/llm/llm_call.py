@@ -32,6 +32,10 @@ async def run_llm_call(
 
         # Add initial system prompt to set the context for the LLM
         run_prompt = get_prompt(get_current_phase().config.prompt_file)
+        if not run_prompt:
+            logger.error("No prompt found for the current phase")
+            return None, None
+
         llm.add_message("run", run_prompt, role="system")
         dbTools.add_message(run_id, "system", run_prompt)
 
