@@ -106,7 +106,7 @@ def _strip_none(d: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _get_indices_registry() -> Dict[str, str]:
-    return {k.upper(): v.upper() for k, v in get_config().ibkr.ind_registry.items()}
+    return {k.upper(): v.upper() for k, v in get_config().ind_registry.items()}
 
 
 async def qualify_contract(ib: IB, data: Dict[str, Any]) -> Tuple[Contract, str]:

@@ -168,7 +168,6 @@ class IBKRConfig(BaseModel):
     min_cash_reserve: float = 500.0
     cash_reserve_currency: str = "USD"
     excluded_cash_currencies: list[str] = Field(default_factory=list)
-    ind_registry: Dict[str, str] = Field(default_factory=dict)
 
 
 class SnapshotIndex(BaseModel):
@@ -193,6 +192,7 @@ class AppConfig(BaseModel):
     snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
     phases: PhasesConfig = Field(default_factory=PhasesConfig)
     phase_config: PhaseConfig = Field(default_factory=PhaseConfig)
+    ind_registry: Dict[str, str] = Field(default_factory=dict)
 
 
 _lock = threading.RLock()
