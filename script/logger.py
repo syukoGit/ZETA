@@ -17,8 +17,8 @@ class _DropIB200UnknownContractFilter(logging.Filter):
 
         msg = record.getMessage()
         is_error_200 = bool(_IB_200_RE.search(msg))
-        is_error_txt = "ib_async.wrapper: Error 200" in msg
-        is_unknown_contract = "ib_async.ib: Unknown contract" in msg
+        is_error_txt = "Error 200" in msg
+        is_unknown_contract = "Unknown contract" in msg
 
         if is_error_200 or is_error_txt or is_unknown_contract:
             return False
@@ -36,7 +36,7 @@ def setup_logging() -> None:
     if root.handlers:
         root.handlers.clear()
 
-    handler = logging.StreamHandler(sys.stdout)
+    handler = _ProgressAwareStreamHandler(sys.stdout)
     handler.setLevel(level)
     handler.addFilter(_DropIB200UnknownContractFilter())
     formatter = colorlog.ColoredFormatter(
@@ -62,16 +62,35 @@ _PROGRESS_PREFIX = "\033[32m[PROGRESS]\033[0m"
 _PROGRESS_PADDING = (
     " " * 20
 )  # Overwrite any leftover characters from a longer previous message
+_CLEAR_LINE = "\r" + " " * 200 + "\r"
+
+_current_progress: str | None = None
+
+
+class _ProgressAwareStreamHandler(logging.StreamHandler):
+    """StreamHandler that preserves the in-place progress line across normal log emissions."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if _current_progress is not None:
+            self.stream.write(_CLEAR_LINE)
+        super().emit(record)
+        if _current_progress is not None:
+            self.stream.write(
+                f"\r{_PROGRESS_PREFIX} {_current_progress}{_PROGRESS_PADDING}"
+            )
+            self.stream.flush()
 
 
 def log_progress(message: str) -> None:
-    """Write an in-place progress line using \r so it overwrites the current terminal line."""
+    global _current_progress
+    _current_progress = message
     sys.stdout.write(f"\r{_PROGRESS_PREFIX} {message}{_PROGRESS_PADDING}")
     sys.stdout.flush()
 
 
 def log_progress_end() -> None:
-    """Finalize the in-place progress line by advancing to the next line."""
+    global _current_progress
+    _current_progress = None
     sys.stdout.write("\n")
     sys.stdout.flush()
 
