@@ -5,7 +5,13 @@ import sys
 import colorlog
 
 from config import config
+from db.time_utils import utc_now
 
+
+RED = "\033[31m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+RESET = "\033[0m"
 
 _IB_200_RE = re.compile(r"\bError\s+200\b", re.IGNORECASE)
 
@@ -36,7 +42,7 @@ def setup_logging() -> None:
     if root.handlers:
         root.handlers.clear()
 
-    handler = _ProgressAwareStreamHandler(sys.stdout)
+    handler = _DynamicAwareStreamHandler(sys.stdout)
     handler.setLevel(level)
     handler.addFilter(_DropIB200UnknownContractFilter())
     formatter = colorlog.ColoredFormatter(
@@ -58,37 +64,31 @@ def setup_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-_PROGRESS_PREFIX = "\033[32m[PROGRESS]\033[0m"
-_PROGRESS_PADDING = (
-    " " * 20
-)  # Overwrite any leftover characters from a longer previous message
 _CLEAR_LINE = "\r" + " " * 200 + "\r"
 
 _current_progress: str | None = None
 
 
-class _ProgressAwareStreamHandler(logging.StreamHandler):
-    """StreamHandler that preserves the in-place progress line across normal log emissions."""
-
+class _DynamicAwareStreamHandler(logging.StreamHandler):
     def emit(self, record: logging.LogRecord) -> None:
         if _current_progress is not None:
             self.stream.write(_CLEAR_LINE)
         super().emit(record)
         if _current_progress is not None:
-            self.stream.write(
-                f"\r{_PROGRESS_PREFIX} {_current_progress}{_PROGRESS_PADDING}"
-            )
+            self.stream.write(f"\r{_current_progress}{RESET}")
             self.stream.flush()
 
 
-def log_progress(message: str) -> None:
+def dynamic_log(message: str, *args) -> None:
     global _current_progress
-    _current_progress = message
-    sys.stdout.write(f"\r{_PROGRESS_PREFIX} {message}{_PROGRESS_PADDING}")
+    formatted = message % args if args else message
+    timestamp = utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    _current_progress = f"{timestamp} {formatted}"
+    sys.stdout.write(f"\r{timestamp} {formatted}{RESET}")
     sys.stdout.flush()
 
 
-def log_progress_end() -> None:
+def dynamic_log_end() -> None:
     global _current_progress
     _current_progress = None
     sys.stdout.write("\n")

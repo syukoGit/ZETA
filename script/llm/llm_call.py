@@ -5,7 +5,7 @@ from llm.prompt import get_prompt
 from llm.tools.history.get_runs_to_review import get_runs_to_review
 from llm.tools.ibkr.get_quote import get_quote
 from llm.tools.utils.get_date_hour_utc_and_markets import get_date_hour_utc_and_markets
-from logger import get_logger, log_progress, log_progress_end
+from logger import GREEN, RESET, get_logger, dynamic_log, dynamic_log_end
 from llm.llm_provider import LLMFactory
 from llm.tools.ibkr.get_cash_balance import get_cash_balance
 from llm.tools.ibkr.get_open_trades import get_open_trades
@@ -14,6 +14,9 @@ from phase_resolver import get_current_phase
 from utils.json_utils import dumps_json
 
 logger = get_logger(__name__)
+
+_dynamic_run_message = f"{GREEN}[Current run] {RESET} Loop %s | Tool calls: %s"
+_dynamic_review_message = f"{GREEN}[Review] {RESET} Loop %s | Tool calls: %s"
 
 
 async def run_llm_call(
@@ -83,8 +86,8 @@ async def run_llm_call(
 
         while not finished and loops_count < max_loops:
             loops_count += 1
-            log_progress(
-                f"Loop {loops_count}/{max_loops} | Tool calls: {total_tool_calls}"
+            dynamic_log(
+                _dynamic_run_message, f"{loops_count}/{max_loops}", total_tool_calls
             )
             (response, tool_calls) = llm.get_response("run")
 
@@ -109,8 +112,10 @@ async def run_llm_call(
                         )
                         dbTools.complete_tool_call(tool_db_id, tool_result)
                         total_tool_calls += 1
-                        log_progress(
-                            f"Loop {loops_count}/{max_loops} | Tool calls: {total_tool_calls}"
+                        dynamic_log(
+                            _dynamic_run_message,
+                            f"{loops_count}/{max_loops}",
+                            total_tool_calls,
                         )
 
                         if tool_name == "close_run":
@@ -140,11 +145,13 @@ async def run_llm_call(
                     )
                     dbTools.complete_tool_call(tool_db_id, None)
                     total_tool_calls += 1
-                    log_progress(
-                        f"Loop {loops_count}/{max_loops} | Tool calls: {total_tool_calls}"
+                    dynamic_log(
+                        _dynamic_run_message,
+                        f"{loops_count}/{max_loops}",
+                        total_tool_calls,
                     )
 
-        log_progress_end()
+        dynamic_log_end()
         logger.info(
             "Run finished: %d loops, %d tool calls total", loops_count, total_tool_calls
         )
@@ -156,7 +163,7 @@ async def run_llm_call(
 
         return output_summary, output_time_before_next_run_s
     except Exception as e:
-        log_progress_end()
+        dynamic_log_end()
         logger.error(
             "An error occurred during the LLM call: %s. Closing chat and ending run.",
             e,
@@ -222,8 +229,8 @@ async def run_llm_review_call(
 
         while not finished and loops_count < max_loops:
             loops_count += 1
-            log_progress(
-                f"[REVIEW] Loop {loops_count}/{max_loops} | Tool calls: {total_tool_calls}"
+            dynamic_log(
+                _dynamic_review_message, f"{loops_count}/{max_loops}", total_tool_calls
             )
             (response, tool_calls) = llm.get_response("review")
 
@@ -250,8 +257,10 @@ async def run_llm_review_call(
                         )
                         dbTools.complete_tool_call(tool_db_id, tool_result)
                         total_tool_calls += 1
-                        log_progress(
-                            f"[REVIEW] Loop {loops_count}/{max_loops} | Tool calls: {total_tool_calls}"
+                        dynamic_log(
+                            _dynamic_review_message,
+                            f"{loops_count}/{max_loops}",
+                            total_tool_calls,
                         )
 
                         if tool_name == "close_review":
@@ -280,11 +289,13 @@ async def run_llm_review_call(
                     )
                     dbTools.complete_tool_call(tool_db_id, None)
                     total_tool_calls += 1
-                    log_progress(
-                        f"[REVIEW] Loop {loops_count}/{max_loops} | Tool calls: {total_tool_calls}"
+                    dynamic_log(
+                        _dynamic_review_message,
+                        f"{loops_count}/{max_loops}",
+                        total_tool_calls,
                     )
 
-        log_progress_end()
+        dynamic_log_end()
         logger.info(
             "Review finished: %d loops, %d tool calls total",
             loops_count,
@@ -298,7 +309,7 @@ async def run_llm_review_call(
 
         return output_review_summary
     except Exception as e:
-        log_progress_end()
+        dynamic_log_end()
         logger.error(
             "An error occurred during the review LLM call: %s. Closing chat and ending review run.",
             e,
