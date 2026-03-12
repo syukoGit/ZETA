@@ -1,11 +1,11 @@
 import logging
 import re
 import sys
+from datetime import datetime, timezone
 
 import colorlog
 
 from config import config
-from db.time_utils import utc_now
 
 
 RED = "\033[31m"
@@ -82,7 +82,7 @@ class _DynamicAwareStreamHandler(logging.StreamHandler):
 def dynamic_log(message: str, *args) -> None:
     global _current_progress
     formatted = message % args if args else message
-    timestamp = utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     _current_progress = f"{timestamp} {formatted}"
     sys.stdout.write(f"\r{timestamp} {formatted}{RESET}")
     sys.stdout.flush()
