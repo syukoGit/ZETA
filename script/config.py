@@ -108,6 +108,11 @@ class PhaseConfig(BaseModel):
         gt=0,
         description="Hours before next open below which OFF_MARKET_SHORT is active",
     )
+    phase_poll_interval_s: int = Field(
+        default=600,
+        gt=0,
+        description="Seconds between phase-change checks during the inter-run wait",
+    )
     pre_market: PreMarketConfig = Field(default_factory=PreMarketConfig)
     opening_window: WindowConfig = Field(default_factory=WindowConfig)
     closing_window: WindowConfig = Field(default_factory=WindowConfig)

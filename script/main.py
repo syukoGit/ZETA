@@ -10,7 +10,7 @@ from logger import setup_logging, get_logger
 from llm.llm_call import run_llm_call, run_llm_review_call
 from phase_resolver import refresh_phase, get_current_phase
 from utils.market_status import get_market_status
-from utils.timing import get_wait_time, countdown_display
+from utils.timing import get_wait_time, wait_with_phase_monitoring
 
 logger = get_logger(__name__)
 
@@ -169,7 +169,7 @@ async def main():
 
                 time_before_next_run = get_wait_time(time_before_next_run)
 
-            await countdown_display(time_before_next_run)
+            await wait_with_phase_monitoring(time_before_next_run)
     except KeyboardInterrupt:
         logger.info("Stopped by user")
     except Exception as e:
