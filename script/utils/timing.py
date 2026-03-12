@@ -1,9 +1,9 @@
 import asyncio
-import sys
 from datetime import datetime, timezone
 
-from logger import get_logger
-from phase_resolver import get_current_phase
+from config import config
+from logger import get_logger, dynamic_log, dynamic_log_end
+from phase_resolver import get_current_phase, refresh_phase
 from utils.market_status import parse_market_snapshot
 
 logger = get_logger(__name__)
@@ -25,20 +25,6 @@ def _min_wait() -> int:
         return get_current_phase().config.run_interval.min
     except RuntimeError:
         return _FALLBACK_MIN_WAIT
-
-
-def is_trading_hours(now: datetime = None) -> bool:
-    """
-    Check whether any monitored exchange is currently open.
-
-    Args:
-        now: The datetime to check (timezone-aware, UTC).
-             If None, uses the current UTC time.
-
-    Returns:
-        True if at least one exchange is open, False otherwise.
-    """
-    return parse_market_snapshot(now)["any_open"]
 
 
 def get_wait_time(time_before_next_run: int) -> int:
@@ -95,26 +81,48 @@ def get_wait_time(time_before_next_run: int) -> int:
     return max(_min_wait(), time_before_next_run)
 
 
-async def countdown_display(wait_seconds: int) -> None:
-    """
-    Display a countdown in the console.
+async def wait_with_phase_monitoring(wait_seconds: int) -> None:
+    initial_phase = get_current_phase().phase
+    poll_interval = config().phase_config.phase_poll_interval_s
 
-    Args:
-        wait_seconds: Number of seconds to wait.
-    """
-    current_hour = datetime.now(timezone.utc).strftime("%H:%M")
     remaining = wait_seconds
+    seconds_since_last_check = 0
+    refresh_task: asyncio.Task | None = None
 
     while remaining > 0:
         mins, secs = divmod(remaining, 60)
-        status_msg = (
-            f"\r⏳ {current_hour} - Next call in {int(mins):02d}:{int(secs):02d}  "
-        )
-        sys.stdout.write(status_msg)
-        sys.stdout.flush()
+        dynamic_log("Next call in %02d:%02d", int(mins), int(secs))
 
         await asyncio.sleep(1)
         remaining -= 1
 
-    # New line after the countdown
-    print()
+        # If a background refresh just finished, inspect the result
+        if refresh_task is not None and refresh_task.done():
+            try:
+                refresh_task.result()
+            except Exception:
+                logger.warning(
+                    "phase_resolver: refresh_phase raised during wait", exc_info=True
+                )
+            refresh_task = None
+            seconds_since_last_check = 0
+            new_phase = get_current_phase().phase
+            if new_phase != initial_phase:
+                dynamic_log_end()
+                logger.info(
+                    "Phase changed from %s to %s during wait — triggering early run",
+                    initial_phase.value,
+                    new_phase.value,
+                )
+                return
+
+        # Launch a new refresh when the interval is reached and no refresh is running
+        if refresh_task is None:
+            seconds_since_last_check += 1
+            if seconds_since_last_check >= poll_interval:
+                refresh_task = asyncio.create_task(refresh_phase())
+
+    if refresh_task is not None and not refresh_task.done():
+        refresh_task.cancel()
+
+    dynamic_log_end()

@@ -5,7 +5,7 @@ import logging
 import threading
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -108,6 +108,11 @@ class PhaseConfig(BaseModel):
         gt=0,
         description="Hours before next open below which OFF_MARKET_SHORT is active",
     )
+    phase_poll_interval_s: int = Field(
+        default=600,
+        gt=0,
+        description="Seconds between phase-change checks during the inter-run wait",
+    )
     pre_market: PreMarketConfig = Field(default_factory=PreMarketConfig)
     opening_window: WindowConfig = Field(default_factory=WindowConfig)
     closing_window: WindowConfig = Field(default_factory=WindowConfig)
@@ -192,6 +197,7 @@ class AppConfig(BaseModel):
     snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
     phases: PhasesConfig = Field(default_factory=PhasesConfig)
     phase_config: PhaseConfig = Field(default_factory=PhaseConfig)
+    ind_registry: Dict[str, str] = Field(default_factory=dict)
 
 
 _lock = threading.RLock()
