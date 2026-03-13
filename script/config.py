@@ -169,14 +169,54 @@ class PhasesConfig(BaseModel):
 class WatchdogConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    farm_stabilization_delay: int = Field(default=30, alias="farmStabilizationDelay")
-    heartbeat_interval: int = Field(default=15, alias="heartbeatInterval")
-    reconnect_max_retries: int = Field(default=3, alias="reconnectMaxRetries")
-    reconnect_initial_backoff: int = Field(default=5, alias="reconnectInitialBackoff")
-    reconnect_max_backoff: int = Field(default=120, alias="reconnectMaxBackoff")
-    guard_timeout: int = Field(default=60, alias="guardTimeout")
-    retry_max_attempts: int = Field(default=3, alias="retryMaxAttempts")
-    retry_initial_delay: int = Field(default=5, alias="retryInitialDelay")
+    farm_stabilization_delay: int = Field(
+        default=30,
+        alias="farmStabilizationDelay",
+        gt=0,
+        description="Delay in seconds for farm stabilization (must be > 0)",
+    )
+    heartbeat_interval: int = Field(
+        default=15,
+        alias="heartbeatInterval",
+        gt=0,
+        description="Interval in seconds for heartbeat (must be > 0)",
+    )
+    reconnect_max_retries: int = Field(
+        default=3,
+        alias="reconnectMaxRetries",
+        ge=1,
+        description="Maximum number of reconnect retries (must be >= 1)",
+    )
+    reconnect_initial_backoff: int = Field(
+        default=5,
+        alias="reconnectInitialBackoff",
+        gt=0,
+        description="Initial backoff in seconds for reconnect (must be > 0)",
+    )
+    reconnect_max_backoff: int = Field(
+        default=120,
+        alias="reconnectMaxBackoff",
+        gt=0,
+        description="Maximum backoff in seconds for reconnect (must be > 0)",
+    )
+    guard_timeout: int = Field(
+        default=60,
+        alias="guardTimeout",
+        gt=0,
+        description="Timeout in seconds for guard (must be > 0)",
+    )
+    retry_max_attempts: int = Field(
+        default=3,
+        alias="retryMaxAttempts",
+        ge=1,
+        description="Maximum number of retry attempts (must be >= 1)",
+    )
+    retry_initial_delay: int = Field(
+        default=5,
+        alias="retryInitialDelay",
+        gt=0,
+        description="Initial delay in seconds for retry (must be > 0)",
+    )
 
 
 class IBKRConfig(BaseModel):
