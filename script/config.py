@@ -166,6 +166,19 @@ class PhasesConfig(BaseModel):
         )
 
 
+class WatchdogConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    farm_stabilization_delay: int = Field(default=30, alias="farmStabilizationDelay")
+    heartbeat_interval: int = Field(default=15, alias="heartbeatInterval")
+    reconnect_max_retries: int = Field(default=3, alias="reconnectMaxRetries")
+    reconnect_initial_backoff: int = Field(default=5, alias="reconnectInitialBackoff")
+    reconnect_max_backoff: int = Field(default=120, alias="reconnectMaxBackoff")
+    guard_timeout: int = Field(default=60, alias="guardTimeout")
+    retry_max_attempts: int = Field(default=3, alias="retryMaxAttempts")
+    retry_initial_delay: int = Field(default=5, alias="retryInitialDelay")
+
+
 class IBKRConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4002
@@ -173,6 +186,7 @@ class IBKRConfig(BaseModel):
     min_cash_reserve: float = 500.0
     cash_reserve_currency: str = "USD"
     excluded_cash_currencies: list[str] = Field(default_factory=list)
+    watchdog: WatchdogConfig = Field(default_factory=WatchdogConfig)
 
 
 class SnapshotIndex(BaseModel):
