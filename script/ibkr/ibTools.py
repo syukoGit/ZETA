@@ -1,6 +1,5 @@
 import asyncio
-from contextlib import asynccontextmanager
-from typing import Awaitable, Callable, Optional, Set, TypeVar
+from typing import Awaitable, Callable, Optional, Set, TypeVar, AsyncContextManager
 
 from ib_async import IB
 
@@ -67,7 +66,7 @@ class IBTools:
             )
         return cls._instance
 
-    def guarded(self) -> asynccontextmanager:
+    def guarded(self) -> AsyncContextManager[None]:
         """Delegate to watchdog.guarded() — waits for STABLE + acquires semaphore."""
         return self.watchdog.guarded()
 
