@@ -5,7 +5,9 @@ from ibkr.utils import format_trades
 from llm.tools.base import register_tool
 
 
-@register_tool("get_trade_history", description="Return trade history for this session.")
+@register_tool(
+    "get_trade_history", description="Return trade history for this session."
+)
 async def get_trade_history(_: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
 

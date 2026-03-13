@@ -98,7 +98,7 @@ async def get_quote(args: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
     ib = ibTools.ib
 
-    async with ibTools.ib_sem:
+    async with ibTools.guarded():
         q, resolved_sec_type = await qualify_contract(
             ib,
             {

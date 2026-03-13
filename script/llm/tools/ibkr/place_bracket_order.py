@@ -11,14 +11,22 @@ from llm.tools.base import register_tool
 
 class PlaceBracketOrderArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
-    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for IBKR to choose the best exchange")
+    exchange: str = Field(
+        "SMART",
+        min_length=1,
+        description="Exchange code. Use 'SMART' for IBKR to choose the best exchange",
+    )
     currency: str = Field("USD", min_length=1)
     primary_exchange: Optional[str] = None
 
     # Parent
-    side: Literal["BUY", "SELL"] = Field(..., description="Order side for the entry order")
+    side: Literal["BUY", "SELL"] = Field(
+        ..., description="Order side for the entry order"
+    )
     qty: int = Field(..., gt=0)
-    entry_type: Literal["MKT", "LMT"] = Field(..., description="Type of the entry order")
+    entry_type: Literal["MKT", "LMT"] = Field(
+        ..., description="Type of the entry order"
+    )
     entry_limit_price: Optional[float] = Field(None, gt=0)
 
     # Take profit
@@ -28,7 +36,9 @@ class PlaceBracketOrderArgs(BaseModel):
     stop_loss_price: float = Field(..., gt=0)
 
     # Time in force
-    tif: Literal["DAY", "GTC"] = Field("DAY", description="Time in force for the orders")
+    tif: Literal["DAY", "GTC"] = Field(
+        "DAY", description="Time in force for the orders"
+    )
 
     @model_validator(mode="after")
     def validate_prices(self):
@@ -49,12 +59,14 @@ async def place_bracket_order(args: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
 
     contract: Stock
-    if (a.primary_exchange):
-        contract = Stock(a.symbol, a.exchange, a.currency, primaryExchange=a.primary_exchange)
+    if a.primary_exchange:
+        contract = Stock(
+            a.symbol, a.exchange, a.currency, primaryExchange=a.primary_exchange
+        )
     else:
         contract = Stock(a.symbol, a.exchange, a.currency)
 
-    async with ibTools.ib_sem:
+    async with ibTools.guarded():
         await ibTools.ib.qualifyContractsAsync(contract)
 
         oca_group = f"OCA-{uuid.uuid4().hex[:10]}"
@@ -64,7 +76,7 @@ async def place_bracket_order(args: Dict[str, Any]) -> Dict[str, Any]:
             parent = MarketOrder(a.side, a.qty)
         else:
             parent = LimitOrder(a.side, a.qty, a.entry_limit_price)
-        
+
         parent.tif = a.tif
         parent.transmit = False
 
@@ -100,7 +112,7 @@ async def place_bracket_order(args: Dict[str, Any]) -> Dict[str, Any]:
                 "tp": a.take_profit_price,
                 "sl": a.stop_loss_price,
             }
-        
+
         parent_trade = ibTools.ib.placeOrder(contract, parent)
         ibTools.ib.placeOrder(contract, tp)
         ibTools.ib.placeOrder(contract, sl)

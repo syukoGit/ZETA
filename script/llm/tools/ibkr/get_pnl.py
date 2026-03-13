@@ -4,11 +4,13 @@ from ibkr.ibTools import IBTools
 from llm.tools.base import register_tool
 
 
-@register_tool("get_pnl", description="Get the profit and loss (PnL) for the positions.")
+@register_tool(
+    "get_pnl", description="Get the profit and loss (PnL) for the positions."
+)
 async def get_pnl(_: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
 
-    async with ibTools.ib_sem:
+    async with ibTools.guarded():
         portfolio = ibTools.ib.portfolio()
         pnl_values: list[Dict[str, Any]] = [
             {

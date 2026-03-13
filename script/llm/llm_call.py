@@ -15,8 +15,12 @@ from utils.json_utils import dumps_json
 
 logger = get_logger(__name__)
 
-_dynamic_run_message = f"{GREEN}[Current run] {RESET} Loop %s | Tool calls: %s"
-_dynamic_review_message = f"{GREEN}[Review] {RESET} Loop %s | Tool calls: %s"
+_dynamic_run_message = (
+    f"{GREEN}[Current run] {RESET} Loop %s | Tool calls: %s (failed: %s)"
+)
+_dynamic_review_message = (
+    f"{GREEN}[Review] {RESET} Loop %s | Tool calls: %s (failed: %s)"
+)
 
 
 async def run_llm_call(
@@ -80,6 +84,7 @@ async def run_llm_call(
         loops_count = 0
         finished = False
         total_tool_calls = 0
+        failed_tool_calls = 0
 
         output_summary = None
         output_time_before_next_run_s = None
@@ -87,7 +92,10 @@ async def run_llm_call(
         while not finished and loops_count < max_loops:
             loops_count += 1
             dynamic_log(
-                _dynamic_run_message, f"{loops_count}/{max_loops}", total_tool_calls
+                _dynamic_run_message,
+                f"{loops_count}/{max_loops}",
+                total_tool_calls,
+                failed_tool_calls,
             )
             (response, tool_calls) = llm.get_response("run")
 
@@ -116,6 +124,7 @@ async def run_llm_call(
                             _dynamic_run_message,
                             f"{loops_count}/{max_loops}",
                             total_tool_calls,
+                            failed_tool_calls,
                         )
 
                         if tool_name == "close_run":
@@ -136,6 +145,7 @@ async def run_llm_call(
                         dbTools.complete_tool_call(
                             tool_db_id, {"error": error_message}, False
                         )
+                        failed_tool_calls += 1
                         logger.error("Tool %s failed: %s", tool_name, e)
                 else:
                     logger.debug(
@@ -149,11 +159,15 @@ async def run_llm_call(
                         _dynamic_run_message,
                         f"{loops_count}/{max_loops}",
                         total_tool_calls,
+                        failed_tool_calls,
                     )
 
         dynamic_log_end()
         logger.info(
-            "Run finished: %d loops, %d tool calls total", loops_count, total_tool_calls
+            "Run finished: %d loops, %d tool calls total (failed: %d)",
+            loops_count,
+            total_tool_calls,
+            failed_tool_calls,
         )
         llm.close_chats()
         if finished:
@@ -224,13 +238,17 @@ async def run_llm_review_call(
         loops_count = 0
         finished = False
         total_tool_calls = 0
+        failed_tool_calls = 0
 
         output_review_summary = None
 
         while not finished and loops_count < max_loops:
             loops_count += 1
             dynamic_log(
-                _dynamic_review_message, f"{loops_count}/{max_loops}", total_tool_calls
+                _dynamic_review_message,
+                f"{loops_count}/{max_loops}",
+                total_tool_calls,
+                failed_tool_calls,
             )
             (response, tool_calls) = llm.get_response("review")
 
@@ -261,6 +279,7 @@ async def run_llm_review_call(
                             _dynamic_review_message,
                             f"{loops_count}/{max_loops}",
                             total_tool_calls,
+                            failed_tool_calls,
                         )
 
                         if tool_name == "close_review":
@@ -281,6 +300,7 @@ async def run_llm_review_call(
                             tool_db_id, {"error": error_message}, False
                         )
                         logger.error("Tool %s failed in review: %s", tool_name, e)
+                        failed_tool_calls += 1
                 else:
                     logger.debug(
                         "Server-side tool call received in review: %s with payload: %s",
@@ -293,13 +313,15 @@ async def run_llm_review_call(
                         _dynamic_review_message,
                         f"{loops_count}/{max_loops}",
                         total_tool_calls,
+                        failed_tool_calls,
                     )
 
         dynamic_log_end()
         logger.info(
-            "Review finished: %d loops, %d tool calls total",
+            "Review finished: %d loops, %d tool calls total (failed: %d)",
             loops_count,
             total_tool_calls,
+            failed_tool_calls,
         )
         llm.close_chats()
         if finished:
