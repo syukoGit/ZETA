@@ -1,8 +1,14 @@
 import asyncio
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import Awaitable, Callable, Optional, Set, TypeVar
+
 from ib_async import IB
-from logger import get_logger
+
 from config import config
+from ibkr.watchdog import IBWatchdog
+from logger import get_logger
+
+T = TypeVar("T")
 
 logger = get_logger(__name__)
 
@@ -22,9 +28,12 @@ async def init_ib_connection(dry_run: bool = True) -> IB:
         await asyncio.sleep(0.1)
 
     logger.info("IB TWS connected (dry_run=%s)", dry_run)
-    ib_sem = asyncio.Semaphore(5)
 
-    _ = IBTools(ib, ib_sem=ib_sem, dry_run=dry_run)
+    watchdog = IBWatchdog(ib)
+    watchdog.mark_stable()
+    watchdog.start()
+
+    _ = IBTools(ib, dry_run=dry_run, watchdog=watchdog)
 
     return ib
 
@@ -33,24 +42,45 @@ class IBTools:
     _instance: Optional["IBTools"] = None
 
     ib: IB
-    ib_sem: asyncio.Semaphore
     dry_run: bool
+    watchdog: IBWatchdog
 
-    def __new__(cls, ib: IB, *, ib_sem: asyncio.Semaphore, dry_run: bool = True):
+    def __new__(
+        cls,
+        ib: IB,
+        *,
+        dry_run: bool = True,
+        watchdog: IBWatchdog,
+    ):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance.ib = ib
-            cls._instance.ib_sem = ib_sem
             cls._instance.dry_run = dry_run
+            cls._instance.watchdog = watchdog
         return cls._instance
 
     @classmethod
     def get_instance(cls) -> "IBTools":
         if cls._instance is None:
             raise RuntimeError(
-                "IBTools has not been initialized. Call IBTools(ib, ib_sem=...) first."
+                "IBTools has not been initialized. Call init_ib_connection() first."
             )
         return cls._instance
+
+    def guarded(self) -> asynccontextmanager:
+        """Delegate to watchdog.guarded() — waits for STABLE + acquires semaphore."""
+        return self.watchdog.guarded()
+
+    async def request_with_retry(
+        self,
+        coro_factory: Callable[[], Awaitable[T]],
+        *,
+        retry_on_codes: Set[int] | None = None,
+    ) -> T:
+        """Delegate to watchdog.request_with_retry()."""
+        return await self.watchdog.request_with_retry(
+            coro_factory, retry_on_codes=retry_on_codes
+        )
 
     @classmethod
     def reset(cls) -> None:
