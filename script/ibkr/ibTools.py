@@ -30,7 +30,7 @@ async def init_ib_connection(dry_run: bool = True) -> IB:
     logger.info("IB TWS connected (dry_run=%s)", dry_run)
 
     watchdog = IBWatchdog(ib)
-    watchdog.mark_stable()
+    await watchdog._farm_stabilization()
     watchdog.start()
 
     _ = IBTools(ib, dry_run=dry_run, watchdog=watchdog)
