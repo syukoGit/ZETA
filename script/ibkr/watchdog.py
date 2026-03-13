@@ -38,9 +38,9 @@ _CODE_HISTORICAL_DATA_ERROR = 162
 class IBWatchdog:
     """Monitors and manages IB connection lifecycle."""
 
-    def __init__(self, ib: IB, *, ib_sem: asyncio.Semaphore) -> None:
+    def __init__(self, ib: IB) -> None:
         self._ib = ib
-        self._ib_sem = ib_sem
+        self._ib_sem = asyncio.Semaphore(5)
         self._state = ConnectionState.DISCONNECTED
         self._farms_ready = asyncio.Event()
         self._stable_event = asyncio.Event()
