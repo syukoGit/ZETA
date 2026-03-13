@@ -166,6 +166,59 @@ class PhasesConfig(BaseModel):
         )
 
 
+class WatchdogConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    farm_stabilization_delay: int = Field(
+        default=30,
+        alias="farmStabilizationDelay",
+        gt=0,
+        description="Delay in seconds for farm stabilization (must be > 0)",
+    )
+    heartbeat_interval: int = Field(
+        default=15,
+        alias="heartbeatInterval",
+        gt=0,
+        description="Interval in seconds for heartbeat (must be > 0)",
+    )
+    reconnect_max_retries: int = Field(
+        default=3,
+        alias="reconnectMaxRetries",
+        ge=1,
+        description="Maximum number of reconnect retries (must be >= 1)",
+    )
+    reconnect_initial_backoff: int = Field(
+        default=5,
+        alias="reconnectInitialBackoff",
+        gt=0,
+        description="Initial backoff in seconds for reconnect (must be > 0)",
+    )
+    reconnect_max_backoff: int = Field(
+        default=120,
+        alias="reconnectMaxBackoff",
+        gt=0,
+        description="Maximum backoff in seconds for reconnect (must be > 0)",
+    )
+    guard_timeout: int = Field(
+        default=60,
+        alias="guardTimeout",
+        gt=0,
+        description="Timeout in seconds for guard (must be > 0)",
+    )
+    retry_max_attempts: int = Field(
+        default=3,
+        alias="retryMaxAttempts",
+        ge=1,
+        description="Maximum number of retry attempts (must be >= 1)",
+    )
+    retry_initial_delay: int = Field(
+        default=5,
+        alias="retryInitialDelay",
+        gt=0,
+        description="Initial delay in seconds for retry (must be > 0)",
+    )
+
+
 class IBKRConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4002
@@ -173,6 +226,7 @@ class IBKRConfig(BaseModel):
     min_cash_reserve: float = 500.0
     cash_reserve_currency: str = "USD"
     excluded_cash_currencies: list[str] = Field(default_factory=list)
+    watchdog: WatchdogConfig = Field(default_factory=WatchdogConfig)
 
 
 class SnapshotIndex(BaseModel):

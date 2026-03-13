@@ -2,7 +2,8 @@ import asyncio
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 import nest_asyncio
-from ibkr.ibTools import init_ib_connection
+from ibkr.ibTools import IBTools, init_ib_connection
+from ibkr.exceptions import IBConnectionUnavailableError
 from db.database import init_db
 from db.db_tools import DBTools
 from config import config, start_config_watcher
@@ -125,6 +126,9 @@ async def main():
                     )
 
                     time_before_next_run = 1
+                except IBConnectionUnavailableError:
+                    logger.warning("IB connection unavailable during review, skipping")
+                    time_before_next_run = phase_cfg.run_interval.min
                 except Exception as e:
                     logger.error("Error during review LLM call: %s", e)
                     last_review_reporting = None
@@ -156,6 +160,12 @@ async def main():
                         datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                         previous_reporting,
                     )
+                except IBConnectionUnavailableError:
+                    logger.warning(
+                        "IB connection unavailable during LLM call, skipping"
+                    )
+                    previous_reporting = {}
+                    time_before_next_run = phase_cfg.run_interval.min
                 except Exception as e:
                     logger.error("Error during LLM call: %s", e)
                     previous_reporting = {}
@@ -175,6 +185,11 @@ async def main():
     except Exception as e:
         logger.error("Error in main: %s", e, exc_info=True)
     finally:
+        try:
+            ibTools = IBTools.get_instance()
+            await ibTools.watchdog.shutdown()
+        except RuntimeError:
+            pass
         logger.info("Disconnecting IB...")
         if ib and ib.isConnected():
             ib.disconnect()

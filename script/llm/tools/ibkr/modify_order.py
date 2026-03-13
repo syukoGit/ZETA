@@ -14,14 +14,21 @@ class ModifyOrderArgs(BaseModel):
     time_in_force: Optional[str] = None
 
 
-@register_tool("modify_order", description="Modify an existing order via Interactive Brokers TWS API.", args_model=ModifyOrderArgs, review=False)
+@register_tool(
+    "modify_order",
+    description="Modify an existing order via Interactive Brokers TWS API.",
+    args_model=ModifyOrderArgs,
+    review=False,
+)
 async def modify_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = ModifyOrderArgs(**args)
 
     ibTools = IBTools.get_instance()
 
-    async with ibTools.ib_sem:
-        trade = next((t for t in ibTools.ib.trades() if t.order.orderId == a.order_id), None)
+    async with ibTools.guarded():
+        trade = next(
+            (t for t in ibTools.ib.trades() if t.order.orderId == a.order_id), None
+        )
 
         if trade is None:
             return {
@@ -29,7 +36,7 @@ async def modify_order(args: Dict[str, Any]) -> Dict[str, Any]:
                 "orderId": a.order_id,
                 "asOf": datetime.now(timezone.utc).isoformat(),
             }
-        
+
         if trade.orderStatus.status in ("Filled", "Cancelled"):
             return {
                 "status": "NO_ACTION",
@@ -37,14 +44,14 @@ async def modify_order(args: Dict[str, Any]) -> Dict[str, Any]:
                 "orderStatus": trade.orderStatus.status,
                 "asOf": datetime.now(timezone.utc).isoformat(),
             }
-        
+
         if a.new_limit_price is not None:
             trade.order.lmtPrice = a.new_limit_price
         if a.new_qty is not None:
             trade.order.totalQuantity = a.new_qty
         if a.time_in_force is not None:
             trade.order.tif = a.time_in_force
-        
+
         ibTools.ib.placeOrder(trade.contract, trade.order)
 
         return {
