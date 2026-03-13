@@ -57,8 +57,8 @@ class IBWatchdog:
         # Reconnect bookkeeping
         self._consecutive_failures = 0
 
-        # Track recent IB error codes for retry detection
-        self._recent_error_codes: list[int] = []
+        # Per-request error code collectors for retry detection
+        self._error_code_collectors: list[list[int]] = []
 
         # Register IB error callback
         self._ib.errorEvent += self._on_ib_error
@@ -162,10 +162,28 @@ class IBWatchdog:
         max_attempts = wd_cfg.retry_max_attempts
         delay = wd_cfg.retry_initial_delay
 
+        # Per-request error collector, isolated from other concurrent requests
+        error_codes: list[int] = []
+        self._error_code_collectors.append(error_codes)
+        try:
+            return await self._do_retry(
+                coro_factory, retry_on_codes, max_attempts, delay, wd_cfg, error_codes
+            )
+        finally:
+            self._error_code_collectors.remove(error_codes)
+
+    async def _do_retry(
+        self,
+        coro_factory: Callable[[], Awaitable[T]],
+        retry_on_codes: Set[int],
+        max_attempts: int,
+        delay: float,
+        wd_cfg: object,
+        error_codes: list[int],
+    ) -> T:
         last_exc: BaseException | None = None
         for attempt in range(1, max_attempts + 1):
-            # Clear recent error codes before attempting
-            self._recent_error_codes.clear()
+            error_codes.clear()
             try:
                 async with self.guarded():
                     return await coro_factory()
@@ -174,8 +192,8 @@ class IBWatchdog:
                 if exc.error_code not in retry_on_codes:
                     raise
             except Exception as exc:
-                # Check if a retryable IB error appeared during execution
-                if not (retry_on_codes & set(self._recent_error_codes)):
+                # Check if a retryable IB error appeared during this request
+                if not (retry_on_codes & set(error_codes)):
                     raise
                 last_exc = exc
 
@@ -287,7 +305,8 @@ class IBWatchdog:
 
         elif errorCode == _CODE_HISTORICAL_DATA_ERROR:
             logger.warning("Historical data error (162): %s", errorString)
-            self._recent_error_codes.append(errorCode)
+            for collector in self._error_code_collectors:
+                collector.append(errorCode)
 
     def _on_disconnected(self) -> None:
         logger.warning("IB disconnected event received")
