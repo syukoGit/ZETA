@@ -91,8 +91,6 @@ class IBWatchdog:
         if self._state == ConnectionState.STABLE:
             return True
 
-        self._stable_event.clear()
-
         try:
             await asyncio.wait_for(self._stable_event.wait(), timeout=timeout)
             return True
@@ -139,8 +137,6 @@ class IBWatchdog:
                 self._state.value,
                 timeout,
             )
-
-            self._stable_event.clear()
 
             try:
                 await asyncio.wait_for(self._stable_event.wait(), timeout=timeout)
