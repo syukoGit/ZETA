@@ -32,7 +32,7 @@ async def _fetch_ticker(symbol: str, exchange: str, currency: str) -> Optional[T
         ibtools = IBTools.get_instance()
         ib = ibtools.ib
 
-        async with ibtools.ib_sem:
+        async with ibtools.guarded():
             contract = Contract(
                 secType="IND", symbol=symbol, exchange=exchange, currency=currency
             )

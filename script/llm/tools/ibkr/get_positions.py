@@ -8,7 +8,7 @@ from llm.tools.base import register_tool
 async def get_positions(_: Dict[str, Any]) -> Dict[str, Any]:
     ibTools = IBTools.get_instance()
 
-    async with ibTools.ib_sem:
+    async with ibTools.guarded():
         pos: list[Dict[str, Any]] = [
             {"symbol": p.contract.symbol, "position": p.position, "avgCost": p.avgCost}
             for p in ibTools.ib.positions()

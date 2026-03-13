@@ -13,10 +13,16 @@ logger = get_logger(__name__)
 
 class PreviewOrderArgs(BaseModel):
     symbol: str = Field(..., min_length=1)
-    exchange: str = Field("SMART", min_length=1, description="Exchange code. Use 'SMART' for IBKR to choose the best exchange")
+    exchange: str = Field(
+        "SMART",
+        min_length=1,
+        description="Exchange code. Use 'SMART' for IBKR to choose the best exchange",
+    )
     currency: str = Field("USD", min_length=1)
 
-    side: Literal["BUY", "SELL"] = Field(..., description="Order side for the entry order")
+    side: Literal["BUY", "SELL"] = Field(
+        ..., description="Order side for the entry order"
+    )
     qty: float = Field(..., gt=0)
 
     order_type: Literal["MKT", "LMT"] = Field(..., description="Type of the order")
@@ -29,24 +35,31 @@ class PreviewOrderArgs(BaseModel):
         return self
 
 
-@register_tool("preview_order", description="Preview a stock order via Interactive Brokers TWS API.", args_model=PreviewOrderArgs, review=False)
+@register_tool(
+    "preview_order",
+    description="Preview a stock order via Interactive Brokers TWS API.",
+    args_model=PreviewOrderArgs,
+    review=False,
+)
 async def preview_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = PreviewOrderArgs(**args)
 
     ibTools = IBTools.get_instance()
 
-    async with ibTools.ib_sem:
+    async with ibTools.guarded():
         q, resolved_sec_type = await qualify_contract(
             ibTools.ib,
             {
                 "symbol": a.symbol,
                 "exchange": a.exchange,
                 "currency": a.currency,
-            }
+            },
         )
 
         if resolved_sec_type != "STK":
-            raise ValueError(f"Unsupported security type for trading: {resolved_sec_type}. Only STK is supported.")
+            raise ValueError(
+                f"Unsupported security type for trading: {resolved_sec_type}. Only STK is supported."
+            )
 
         if a.order_type == "MKT":
             order = MarketOrder(a.side, a.qty)
@@ -54,12 +67,14 @@ async def preview_order(args: Dict[str, Any]) -> Dict[str, Any]:
             if a.limit_price is None:
                 raise ValueError("limit_price required for LMT")
             order = LimitOrder(a.side, a.qty, a.limit_price)
-        
+
         order.tif = "DAY"
-        
+
         estimate = await ibTools.ib.whatIfOrderAsync(q, order)
 
-        logger.debug("Order estimate for %s %s %s: %s", a.side, a.qty, q.symbol, estimate)
+        logger.debug(
+            "Order estimate for %s %s %s: %s", a.side, a.qty, q.symbol, estimate
+        )
 
         return {
             "symbol": q.symbol,
