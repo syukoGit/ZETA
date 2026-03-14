@@ -27,9 +27,27 @@ _dynamic_review_message = (
 )
 
 
+# Limit for concurrent client-side tool executions to avoid unbounded bursts
+_MAX_CONCURRENT_CLIENT_TOOLS = 10
+
+
 # ---------------------------------------------------------------------------
 # Parallel tool-call execution helpers
 # ---------------------------------------------------------------------------
+
+
+async def _execute_client_tool_with_limit(
+    llm: LLM,
+    tc: Any,
+    message_id: UUID,
+    semaphore: asyncio.Semaphore,
+) -> Any:
+    """
+    Wrapper around llm.execute_client_side_tool that enforces a concurrency limit
+    via an asyncio.Semaphore.
+    """
+    async with semaphore:
+        return await llm.execute_client_side_tool(tc, message_id)
 
 
 @dataclass
@@ -58,13 +76,21 @@ async def _process_tool_calls(
         is_client = llm.is_client_side_tool(tc)
         prepared.append((tc, tool_name, tool_db_id, is_client))
 
-    # 2. Launch client-side tools concurrently
+    # 2. Launch client-side tools concurrently, but with a bounded concurrency
     # Build a future for each slot; server-side slots get None.
+    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_CLIENT_TOOLS)
     futures: List[asyncio.Task | None] = []
     for tc, tool_name, tool_db_id, is_client in prepared:
         if is_client:
             futures.append(
-                asyncio.ensure_future(llm.execute_client_side_tool(tc, message_id))
+                asyncio.create_task(
+                    _execute_client_tool_with_limit(
+                        llm=llm,
+                        tc=tc,
+                        message_id=message_id,
+                        semaphore=semaphore,
+                    )
+                )
             )
         else:
             futures.append(None)
