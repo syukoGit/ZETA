@@ -101,21 +101,34 @@ async def _process_tool_calls(
         future = futures[idx]
         exec_result = ToolExecResult(tool_name=tool_name, tool_db_id=tool_db_id)
 
-        exc = future.exception()
-        if exc is not None:
-            error_message = f"Error executing tool {tool_name}: {str(exc)}"
+        assert future is not None
+        try:
+            # If the task was cancelled, this will raise asyncio.CancelledError
+            if future.cancelled():
+                raise asyncio.CancelledError()
+            exc = future.exception()
+        except asyncio.CancelledError as cancel_exc:
+            error_message = f"Tool {tool_name} was cancelled: {str(cancel_exc)}"
             llm.add_message(chat_mode, error_message, role="tool_result")
             dbTools.complete_tool_call(tool_db_id, {"error": error_message}, False)
             exec_result.error = error_message
             fail_count += 1
-            logger.error("Tool %s failed: %s", tool_name, exc)
+            logger.warning("Tool %s was cancelled: %s", tool_name, cancel_exc)
         else:
-            tool_result = future.result()
-            logger.debug("Tool %s result: %s", tool_name, tool_result)
-            llm.add_message(chat_mode, dumps_json(tool_result), role="tool_result")
-            dbTools.complete_tool_call(tool_db_id, tool_result)
-            exec_result.result = tool_result
-            success_count += 1
+            if exc is not None:
+                error_message = f"Error executing tool {tool_name}: {str(exc)}"
+                llm.add_message(chat_mode, error_message, role="tool_result")
+                dbTools.complete_tool_call(tool_db_id, {"error": error_message}, False)
+                exec_result.error = error_message
+                fail_count += 1
+                logger.error("Tool %s failed: %s", tool_name, exc)
+            else:
+                tool_result = future.result()
+                logger.debug("Tool %s result: %s", tool_name, tool_result)
+                llm.add_message(chat_mode, dumps_json(tool_result), role="tool_result")
+                dbTools.complete_tool_call(tool_db_id, tool_result)
+                exec_result.result = tool_result
+                success_count += 1
 
         results.append(exec_result)
 
