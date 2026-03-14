@@ -245,7 +245,7 @@ All environment variables are defined in a `.env` file at the project root (load
 
 ## Prerequisites
 
-- **Python 3.11+**
+- **Python 3.12+**
 - **Docker** (for PostgreSQL + pgvector)
 - **Interactive Brokers TWS** (port `7497`) or **IB Gateway** (port `4002`) running on `127.0.0.1`
 - An **xAI (Grok)** API key
@@ -374,7 +374,7 @@ Notes:
 
 | Component | Technology |
 | --- | --- |
-| Language | Python 3.11+ |
+| Language | Python 3.12+ |
 | LLM | Grok (xAI) via `xai_sdk` |
 | Broker | Interactive Brokers via `ib_async` |
 | Database | PostgreSQL 16 + pgvector |
