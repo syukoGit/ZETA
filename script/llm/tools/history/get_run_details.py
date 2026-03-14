@@ -5,10 +5,17 @@ from pydantic import BaseModel, Field
 from db.db_tools import DBTools
 from llm.tools.base import register_tool
 
+
 class GetRunDetailsArgs(BaseModel):
     run_id: str = Field(..., description="ID of the run to retrieve details for.")
 
-@register_tool("get_run_details", description="Get details of a specific run, including messages and tool calls.", args_model=GetRunDetailsArgs, run=False)
+
+@register_tool(
+    "get_run_details",
+    description="Get details of a specific run, including messages and tool calls.",
+    args_model=GetRunDetailsArgs,
+    run=False,
+)
 async def get_run_details(args: Dict[str, Any]) -> Dict[str, Any]:
     a = GetRunDetailsArgs(**args)
 
@@ -20,7 +27,7 @@ async def get_run_details(args: Dict[str, Any]) -> Dict[str, Any]:
             "status": "NOT_FOUND",
             "runId": a.run_id,
         }
-    
+
     return {
         "id": run.id,
         "trigger_type": run.trigger_type,
@@ -29,7 +36,7 @@ async def get_run_details(args: Dict[str, Any]) -> Dict[str, Any]:
         "started_at": run.started_at.isoformat(),
         "ended_at": run.ended_at.isoformat() if run.ended_at else None,
         "status": run.status,
-        "messages" : [
+        "messages": [
             {
                 "id": msg.id,
                 "role": msg.role,
@@ -48,5 +55,5 @@ async def get_run_details(args: Dict[str, Any]) -> Dict[str, Any]:
                 ],
             }
             for msg in run.messages
-        ]
+        ],
     }
