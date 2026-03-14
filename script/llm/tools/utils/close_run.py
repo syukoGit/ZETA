@@ -51,7 +51,7 @@ class CloseRunArgs(BaseModel):
     args_model=CloseRunArgs,
     review=False,
 )
-async def close_run(args: Dict[str, Any]) -> Dict[str, str]:
+async def close_run(args: Dict[str, Any]) -> Dict[str, Any]:
     a = CloseRunArgs(**args)
 
     return {
