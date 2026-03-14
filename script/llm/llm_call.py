@@ -1,4 +1,8 @@
-from typing import Any, Dict, Tuple
+import asyncio
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
+from uuid import UUID
+
 from config import config
 from db.db_tools import DBTools
 from llm.prompt import get_prompt
@@ -6,7 +10,7 @@ from llm.tools.history.get_runs_to_review import get_runs_to_review
 from llm.tools.ibkr.get_quote import get_quote
 from llm.tools.utils.get_date_hour_utc_and_markets import get_date_hour_utc_and_markets
 from logger import GREEN, RESET, get_logger, dynamic_log, dynamic_log_end
-from llm.llm_provider import LLMFactory
+from llm.llm_provider import LLM, LLMFactory, ChatMode
 from llm.tools.ibkr.get_cash_balance import get_cash_balance
 from llm.tools.ibkr.get_open_trades import get_open_trades
 from llm.tools.ibkr.get_positions import get_positions
@@ -21,6 +25,101 @@ _dynamic_run_message = (
 _dynamic_review_message = (
     f"{GREEN}[Review] {RESET} Loop %s | Tool calls: %s (failed: %s)"
 )
+
+
+# ---------------------------------------------------------------------------
+# Parallel tool-call execution helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ToolExecResult:
+    """Result of a single tool execution (client-side or server-side)."""
+
+    tool_name: str
+    tool_db_id: UUID
+    result: dict | None = None
+    error: str | None = None
+    is_server_side: bool = False
+
+
+async def _process_tool_calls(
+    llm: LLM,
+    dbTools: DBTools,
+    tool_calls: list,
+    message_id: UUID,
+    chat_mode: ChatMode,
+) -> Tuple[List[ToolExecResult], int, int]:
+    # 1. Pre-log every tool call and classify client-side vs server-side
+    prepared: List[Tuple[Any, str, UUID, bool]] = []  # (tc, name, db_id, is_client)
+    for tc in tool_calls:
+        tool_name, payload = llm.get_tool_calls_info(tc)
+        tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+        is_client = llm.is_client_side_tool(tc)
+        prepared.append((tc, tool_name, tool_db_id, is_client))
+
+    # 2. Launch client-side tools concurrently
+    # Build a future for each slot; server-side slots get None.
+    futures: List[asyncio.Task | None] = []
+    for tc, tool_name, tool_db_id, is_client in prepared:
+        if is_client:
+            futures.append(
+                asyncio.ensure_future(llm.execute_client_side_tool(tc, message_id))
+            )
+        else:
+            futures.append(None)
+
+    # Await only the client-side tasks (gather preserves order)
+    client_tasks = [f for f in futures if f is not None]
+    if client_tasks:
+        await asyncio.gather(*client_tasks, return_exceptions=True)
+
+    # 3. Post-process results sequentially in original order
+    results: List[ToolExecResult] = []
+    success_count = 0
+    fail_count = 0
+
+    for idx, (tc, tool_name, tool_db_id, is_client) in enumerate(prepared):
+        if not is_client:
+            # Server-side tool: nothing to execute, just log completion
+            logger.debug(
+                "Server-side tool call received: %s",
+                tool_name,
+            )
+            dbTools.complete_tool_call(tool_db_id, None)
+            success_count += 1
+            results.append(
+                ToolExecResult(
+                    tool_name=tool_name,
+                    tool_db_id=tool_db_id,
+                    is_server_side=True,
+                )
+            )
+            continue
+
+        # Client-side tool: retrieve result from the completed future
+        future = futures[idx]
+        exec_result = ToolExecResult(tool_name=tool_name, tool_db_id=tool_db_id)
+
+        exc = future.exception()
+        if exc is not None:
+            error_message = f"Error executing tool {tool_name}: {str(exc)}"
+            llm.add_message(chat_mode, error_message, role="tool_result")
+            dbTools.complete_tool_call(tool_db_id, {"error": error_message}, False)
+            exec_result.error = error_message
+            fail_count += 1
+            logger.error("Tool %s failed: %s", tool_name, exc)
+        else:
+            tool_result = future.result()
+            logger.debug("Tool %s result: %s", tool_name, tool_result)
+            llm.add_message(chat_mode, dumps_json(tool_result), role="tool_result")
+            dbTools.complete_tool_call(tool_db_id, tool_result)
+            exec_result.result = tool_result
+            success_count += 1
+
+        results.append(exec_result)
+
+    return results, success_count, fail_count
 
 
 async def run_llm_call(
@@ -106,61 +205,27 @@ async def run_llm_call(
 
             logger.debug("Tool calls received: %d", len(tool_calls))
 
-            for tc in tool_calls:
-                (tool_name, payload) = llm.get_tool_calls_info(tc)
-                tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+            results, ok, fail = await _process_tool_calls(
+                llm, dbTools, tool_calls, message_id, "run"
+            )
+            total_tool_calls += ok
+            failed_tool_calls += fail
+            dynamic_log(
+                _dynamic_run_message,
+                f"{loops_count}/{max_loops}",
+                total_tool_calls,
+                failed_tool_calls,
+            )
 
-                if llm.is_client_side_tool(tc):
-                    try:
-                        tool_result = await llm.execute_client_side_tool(tc, message_id)
-                        logger.debug("Tool %s result: %s", tool_name, tool_result)
-
-                        llm.add_message(
-                            "run", dumps_json(tool_result), role="tool_result"
-                        )
-                        dbTools.complete_tool_call(tool_db_id, tool_result)
-                        total_tool_calls += 1
-                        dynamic_log(
-                            _dynamic_run_message,
-                            f"{loops_count}/{max_loops}",
-                            total_tool_calls,
-                            failed_tool_calls,
-                        )
-
-                        if tool_name == "close_run":
-                            logger.info(
-                                "LLM requested to close the run at iteration %d",
-                                loops_count,
-                            )
-
-                            output_summary = tool_result["summary"]
-                            output_time_before_next_run_s = tool_result[
-                                "time_before_next_run_s"
-                            ]
-
-                            finished = True
-                    except Exception as e:
-                        error_message = f"Error executing tool {tool_name}: {str(e)}"
-                        llm.add_message("run", error_message, role="tool_result")
-                        dbTools.complete_tool_call(
-                            tool_db_id, {"error": error_message}, False
-                        )
-                        failed_tool_calls += 1
-                        logger.error("Tool %s failed: %s", tool_name, e)
-                else:
-                    logger.debug(
-                        "Server-side tool call received: %s with payload: %s",
-                        tool_name,
-                        payload,
+            for r in results:
+                if r.tool_name == "close_run" and r.result is not None:
+                    logger.info(
+                        "LLM requested to close the run at iteration %d",
+                        loops_count,
                     )
-                    dbTools.complete_tool_call(tool_db_id, None)
-                    total_tool_calls += 1
-                    dynamic_log(
-                        _dynamic_run_message,
-                        f"{loops_count}/{max_loops}",
-                        total_tool_calls,
-                        failed_tool_calls,
-                    )
+                    output_summary = r.result["summary"]
+                    output_time_before_next_run_s = r.result["time_before_next_run_s"]
+                    finished = True
 
         dynamic_log_end()
         logger.info(
@@ -259,62 +324,26 @@ async def run_llm_review_call(
 
             logger.debug("Tool calls received in review: %d", len(tool_calls))
 
-            for tc in tool_calls:
-                (tool_name, payload) = llm.get_tool_calls_info(tc)
-                tool_db_id = dbTools.log_tool_call(message_id, tool_name, payload)
+            results, ok, fail = await _process_tool_calls(
+                llm, dbTools, tool_calls, message_id, "review"
+            )
+            total_tool_calls += ok
+            failed_tool_calls += fail
+            dynamic_log(
+                _dynamic_review_message,
+                f"{loops_count}/{max_loops}",
+                total_tool_calls,
+                failed_tool_calls,
+            )
 
-                if llm.is_client_side_tool(tc):
-                    try:
-                        tool_result = await llm.execute_client_side_tool(tc, message_id)
-                        logger.debug(
-                            "Tool %s result in review: %s", tool_name, tool_result
-                        )
-
-                        llm.add_message(
-                            "review", dumps_json(tool_result), role="tool_result"
-                        )
-                        dbTools.complete_tool_call(tool_db_id, tool_result)
-                        total_tool_calls += 1
-                        dynamic_log(
-                            _dynamic_review_message,
-                            f"{loops_count}/{max_loops}",
-                            total_tool_calls,
-                            failed_tool_calls,
-                        )
-
-                        if tool_name == "close_review":
-                            logger.info(
-                                "LLM requested to close the review at iteration %d",
-                                loops_count,
-                            )
-
-                            output_review_summary = tool_result
-
-                            finished = True
-                    except Exception as e:
-                        error_message = (
-                            f"Error executing tool {tool_name} in review: {str(e)}"
-                        )
-                        llm.add_message("review", error_message, role="tool_result")
-                        dbTools.complete_tool_call(
-                            tool_db_id, {"error": error_message}, False
-                        )
-                        logger.error("Tool %s failed in review: %s", tool_name, e)
-                        failed_tool_calls += 1
-                else:
-                    logger.debug(
-                        "Server-side tool call received in review: %s with payload: %s",
-                        tool_name,
-                        payload,
+            for r in results:
+                if r.tool_name == "close_review" and r.result is not None:
+                    logger.info(
+                        "LLM requested to close the review at iteration %d",
+                        loops_count,
                     )
-                    dbTools.complete_tool_call(tool_db_id, None)
-                    total_tool_calls += 1
-                    dynamic_log(
-                        _dynamic_review_message,
-                        f"{loops_count}/{max_loops}",
-                        total_tool_calls,
-                        failed_tool_calls,
-                    )
+                    output_review_summary = r.result
+                    finished = True
 
         dynamic_log_end()
         logger.info(
