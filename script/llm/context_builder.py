@@ -167,15 +167,23 @@ async def build_context(template: str, static_vars: dict[str, str]) -> dict[str,
         if key not in _FETCHERS:
             continue
         task = fetcher_tasks[key]
-        exc = task.exception() if not task.cancelled() else None
-        if task.cancelled() or exc is not None:
-            logger.error("Fetcher '%s' failed: %s", key, exc)
+        if task.cancelled():
+            logger.error("Fetcher '%s' was cancelled", key)
+            resolved[key] = "N/A"
+            continue
+        exc = task.exception()
+        if exc is not None:
+            logger.error(
+                "Fetcher '%s' failed with exception",
+                key,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             resolved[key] = "N/A"
             continue
         try:
             resolved[key] = str(task.result())
-        except Exception as e:
-            logger.error("Fetcher for {{%s}} raised: %s", key, e)
+        except Exception:
+            logger.error("Fetcher for {{%s}} raised", key, exc_info=True)
             resolved[key] = "N/A"
 
     return resolved
