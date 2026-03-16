@@ -147,7 +147,7 @@ def _extract_template_keys(template: str) -> set[str]:
 
 
 async def build_context(template: str, static_vars: dict[str, str]) -> dict[str, str]:
-    dataContext = DataContext()
+    data_context = DataContext()
     needed_keys = _extract_template_keys(template) - static_vars.keys()
 
     for key in needed_keys:
@@ -155,7 +155,7 @@ async def build_context(template: str, static_vars: dict[str, str]) -> dict[str,
             logger.warning("No fetcher registered for template variable: {{%s}}", key)
 
     fetcher_tasks: dict[str, asyncio.Task] = {
-        k: asyncio.create_task(_FETCHERS[k](dataContext))
+        k: asyncio.create_task(_FETCHERS[k](data_context))
         for k in needed_keys
         if k in _FETCHERS
     }
