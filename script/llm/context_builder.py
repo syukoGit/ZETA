@@ -25,16 +25,16 @@ class DataContext:
     date_hour_and_markets: dict[str, Any] | None = None
 
 
-async def _fetch_current_datetime(dataContext: DataContext) -> str:
-    if dataContext.date_hour_and_markets is None:
-        dataContext.date_hour_and_markets = await get_date_hour_utc_and_markets({})
-    return dataContext.date_hour_and_markets["date_and_hour"]
+async def _fetch_current_datetime(data_context: DataContext) -> str:
+    if data_context.date_hour_and_markets is None:
+        data_context.date_hour_and_markets = await get_date_hour_utc_and_markets({})
+    return data_context.date_hour_and_markets["date_and_hour"]
 
 
-async def _fetch_market_status(dataContext: DataContext) -> str:
-    if dataContext.date_hour_and_markets is None:
-        dataContext.date_hour_and_markets = await get_date_hour_utc_and_markets({})
-    return dumps_json(dataContext.date_hour_and_markets["markets"])
+async def _fetch_market_status(data_context: DataContext) -> str:
+    if data_context.date_hour_and_markets is None:
+        data_context.date_hour_and_markets = await get_date_hour_utc_and_markets({})
+    return dumps_json(data_context.date_hour_and_markets["markets"])
 
 
 async def _fetch_next_market_close(_) -> str:
