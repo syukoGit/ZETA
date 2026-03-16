@@ -67,13 +67,13 @@ class RunRepository(BaseRepository[Run]):
         return run
 
     def get_filtered_runs(
-            self,
-            trigger_type: Optional[str] = None,
-            status: Optional[str] = None,
-            before: Optional[datetime] = None,
-            after: Optional[datetime] = None,
-            limit: Optional[int] = None
-        ) -> List[Run]:
+        self,
+        trigger_type: Optional[str] = None,
+        status: Optional[str] = None,
+        before: Optional[datetime] = None,
+        after: Optional[datetime] = None,
+        limit: Optional[int] = None,
+    ) -> List[Run]:
         """
         Get runs with optional time filtering.
         Args:
@@ -85,10 +85,7 @@ class RunRepository(BaseRepository[Run]):
         Returns:
             List of runs matching the filters.
         """
-        query = (
-            self.session.query(Run)
-            .order_by(Run.started_at.desc())
-        )
+        query = self.session.query(Run).order_by(Run.started_at.desc())
 
         if trigger_type:
             query = query.filter(Run.trigger_type == trigger_type)
@@ -100,7 +97,7 @@ class RunRepository(BaseRepository[Run]):
             query = query.filter(Run.started_at >= after)
         if limit:
             query = query.limit(limit)
-        
+
         return query.all()
 
     def get_run_with_details(self, run_id: UUID) -> Optional[Run]:
