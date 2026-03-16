@@ -81,31 +81,38 @@ async def _fetch_current_phase_max(_) -> str:
 
 
 async def _fetch_quotes(_) -> str:
-    quotes: Dict[str, Any] = {}
-    for idx in config().snapshot.indices:
-        try:
-            result = await get_quote(
-                {
-                    "symbol": idx.symbol,
-                    "exchange": idx.exchange,
-                    "currency": idx.currency,
-                }
-            )
-            if isinstance(result, dict):
-                quotes[idx.symbol] = result.get("last")
-            else:
-                logger.error(
-                    "get_quote for index %s returned non-dict result: %r",
-                    idx.symbol,
-                    result,
-                )
-                quotes[idx.symbol] = None
-        except Exception as e:
-            logger.error("Failed to fetch quote for index %s: %s", idx.symbol, e)
-            quotes[idx.symbol] = None
+    # Fetch index quotes concurrently (with a bounded concurrency limit)
+    semaphore = asyncio.Semaphore(5)
 
-    lines = []
-    for symbol, last in quotes.items():
+    async def fetch_for_index(idx) -> tuple[str, Any | None]:
+        async with semaphore:
+            try:
+                result = await get_quote(
+                    {
+                        "symbol": idx.symbol,
+                        "exchange": idx.exchange,
+                        "currency": idx.currency,
+                    }
+                )
+                if isinstance(result, dict):
+                    return idx.symbol, result.get("last")
+                else:
+                    logger.error(
+                        "get_quote for index %s returned non-dict result: %r",
+                        idx.symbol,
+                        result,
+                    )
+                    return idx.symbol, None
+            except Exception as e:
+                logger.error("Failed to fetch quote for index %s: %s", idx.symbol, e)
+                return idx.symbol, None
+
+    indices = list(config().snapshot.indices)
+    tasks = [asyncio.create_task(fetch_for_index(idx)) for idx in indices]
+    results = await asyncio.gather(*tasks)
+
+    lines: list[str] = []
+    for symbol, last in results:
         value = f"{last:,.2f}" if isinstance(last, (int, float)) else "N/A"
         lines.append(f"{symbol}: {value}")
 
