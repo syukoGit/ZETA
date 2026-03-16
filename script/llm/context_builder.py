@@ -59,7 +59,7 @@ async def _fetch_runs_to_review() -> str:
 
 
 async def _fetch_current_phase() -> str:
-    return str(get_current_phase().phase)
+    return get_current_phase().phase.value
 
 
 async def _fetch_current_phase_min() -> str:
