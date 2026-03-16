@@ -2,8 +2,10 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable, Dict
 
+from config import config
+from llm.tools.ibkr.get_quote import get_quote
 from llm.tools.ibkr.get_cash_balance import get_cash_balance
 from llm.tools.ibkr.get_open_trades import get_open_trades
 from llm.tools.ibkr.get_pnl import get_pnl
@@ -70,6 +72,38 @@ async def _fetch_current_phase_max() -> str:
     return str(get_current_phase().config.run_interval.max)
 
 
+async def _fetch_quotes() -> str:
+    quotes: Dict[str, Any] = {}
+    for idx in config().snapshot.indices:
+        try:
+            result = await get_quote(
+                {
+                    "symbol": idx.symbol,
+                    "exchange": idx.exchange,
+                    "currency": idx.currency,
+                }
+            )
+            if isinstance(result, dict):
+                quotes[idx.symbol] = result.get("last")
+            else:
+                logger.error(
+                    "get_quote for index %s returned non-dict result: %r",
+                    idx.symbol,
+                    result,
+                )
+                quotes[idx.symbol] = None
+        except Exception as e:
+            logger.error("Failed to fetch quote for index %s: %s", idx.symbol, e)
+            quotes[idx.symbol] = None
+
+    lines = []
+    for symbol, last in quotes.items():
+        value = f"{last:,.2f}" if isinstance(last, (int, float)) else "N/A"
+        lines.append(f"{symbol}: {value}")
+
+    return "\n".join(lines)
+
+
 _FETCHERS: dict[str, Callable[[], Awaitable[str]]] = {
     "current_phase": _fetch_current_phase,
     "phase.min": _fetch_current_phase_min,
@@ -82,6 +116,7 @@ _FETCHERS: dict[str, Callable[[], Awaitable[str]]] = {
     "open_trades": _fetch_open_trades,
     "pnl": _fetch_pnl,
     "runs_to_review": _fetch_runs_to_review,
+    "quotes": _fetch_quotes,
 }
 
 
