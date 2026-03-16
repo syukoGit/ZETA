@@ -110,8 +110,8 @@ async def _fetch_quotes(_) -> str:
                         result,
                     )
                     return idx.symbol, None
-            except Exception as e:
-                logger.error("Failed to fetch quote for index %s: %s", idx.symbol, e)
+            except Exception:
+                logger.exception("Failed to fetch quote for index %s", idx.symbol)
                 return idx.symbol, None
 
     indices = list(config().snapshot.indices)
