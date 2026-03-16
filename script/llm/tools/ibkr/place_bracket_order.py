@@ -52,7 +52,12 @@ class PlaceBracketOrderArgs(BaseModel):
         return self
 
 
-# @register_tool("place_bracket_order", description="Place a bracket order via Interactive Brokers TWS API.", args_model=PlaceBracketOrderArgs, review=False)
+@register_tool(
+    "place_bracket_order",
+    description="Place a bracket order via Interactive Brokers TWS API.",
+    args_model=PlaceBracketOrderArgs,
+    review=False,
+)
 async def place_bracket_order(args: Dict[str, Any]) -> Dict[str, Any]:
     a = PlaceBracketOrderArgs(**args)
 
