@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 import logging
 import re
 from datetime import datetime, timezone
@@ -19,60 +20,67 @@ from utils.market_status import parse_market_snapshot
 logger = logging.getLogger(__name__)
 
 
-async def _fetch_current_datetime() -> str:
-    result = await get_date_hour_utc_and_markets({})
-    return result["date_and_hour"]
+@dataclass
+class DataContext:
+    date_hour_and_markets: dict[str, Any] | None = None
 
 
-async def _fetch_market_status() -> str:
-    result = await get_date_hour_utc_and_markets({})
-    return dumps_json(result["markets"])
+async def _fetch_current_datetime(dataContext: DataContext) -> str:
+    if dataContext.date_hour_and_markets is None:
+        dataContext.date_hour_and_markets = await get_date_hour_utc_and_markets({})
+    return dataContext.date_hour_and_markets["date_and_hour"]
 
 
-async def _fetch_next_market_close() -> str:
+async def _fetch_market_status(dataContext: DataContext) -> str:
+    if dataContext.date_hour_and_markets is None:
+        dataContext.date_hour_and_markets = await get_date_hour_utc_and_markets({})
+    return dumps_json(dataContext.date_hour_and_markets["markets"])
+
+
+async def _fetch_next_market_close(_) -> str:
     snapshot = parse_market_snapshot(datetime.now(timezone.utc))
     close = snapshot.get("soonest_close")
     return close.strftime("%Y-%m-%d %H:%M UTC") if close else "N/A"
 
 
-async def _fetch_cash_balance() -> str:
+async def _fetch_cash_balance(_) -> str:
     result = await get_cash_balance({})
     return dumps_json(result["cash_balances"])
 
 
-async def _fetch_positions() -> str:
+async def _fetch_positions(_) -> str:
     result = await get_positions({})
     return dumps_json(result["positions"])
 
 
-async def _fetch_open_trades() -> str:
+async def _fetch_open_trades(_) -> str:
     result = await get_open_trades({})
     return dumps_json(result["open_trades"])
 
 
-async def _fetch_pnl() -> str:
+async def _fetch_pnl(_) -> str:
     result = await get_pnl({})
     return dumps_json(result["pnl"])
 
 
-async def _fetch_runs_to_review() -> str:
+async def _fetch_runs_to_review(_) -> str:
     result = await get_runs_to_review({})
     return dumps_json(result)
 
 
-async def _fetch_current_phase() -> str:
+async def _fetch_current_phase(_) -> str:
     return get_current_phase().phase.value
 
 
-async def _fetch_current_phase_min() -> str:
+async def _fetch_current_phase_min(_) -> str:
     return str(get_current_phase().config.run_interval.min)
 
 
-async def _fetch_current_phase_max() -> str:
+async def _fetch_current_phase_max(_) -> str:
     return str(get_current_phase().config.run_interval.max)
 
 
-async def _fetch_quotes() -> str:
+async def _fetch_quotes(_) -> str:
     quotes: Dict[str, Any] = {}
     for idx in config().snapshot.indices:
         try:
@@ -104,7 +112,7 @@ async def _fetch_quotes() -> str:
     return "\n".join(lines)
 
 
-_FETCHERS: dict[str, Callable[[], Awaitable[str]]] = {
+_FETCHERS: dict[str, Callable[[DataContext], Awaitable[str]]] = {
     "current_phase": _fetch_current_phase,
     "phase.min": _fetch_current_phase_min,
     "phase.max": _fetch_current_phase_max,
@@ -125,6 +133,7 @@ def _extract_template_keys(template: str) -> set[str]:
 
 
 async def build_context(template: str, static_vars: dict[str, str]) -> dict[str, str]:
+    dataContext = DataContext()
     needed_keys = _extract_template_keys(template) - static_vars.keys()
 
     for key in needed_keys:
@@ -132,7 +141,9 @@ async def build_context(template: str, static_vars: dict[str, str]) -> dict[str,
             logger.warning("No fetcher registered for template variable: {{%s}}", key)
 
     fetcher_tasks: dict[str, asyncio.Task] = {
-        k: asyncio.create_task(_FETCHERS[k]()) for k in needed_keys if k in _FETCHERS
+        k: asyncio.create_task(_FETCHERS[k](dataContext))
+        for k in needed_keys
+        if k in _FETCHERS
     }
     if fetcher_tasks:
         await asyncio.gather(*fetcher_tasks.values(), return_exceptions=True)
