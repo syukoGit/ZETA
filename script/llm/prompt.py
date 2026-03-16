@@ -36,14 +36,18 @@ def get_prompt(prompt_name: str) -> str:
 def render_template(template: str, variables: dict[str, str]) -> str:
     """Substitute {{key}} placeholders with values from *variables*.
 
-    Unresolved placeholders are left as-is and trigger a warning.
+    Unresolved placeholders are left as-is and trigger a warning once per key.
     """
+
+    warned_keys: set[str] = set()
 
     def replace(match: re.Match) -> str:
         key = match.group(1)
         if key in variables:
             return str(variables[key])
-        logger.warning("Unresolved template variable: {{%s}}", key)
+        if key not in warned_keys:
+            logger.warning("Unresolved template variable: {{%s}}", key)
+            warned_keys.add(key)
         return match.group(0)
 
     return re.sub(r"\{\{([\w.]+)\}\}", replace, template)
