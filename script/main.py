@@ -171,7 +171,7 @@ async def main():
                     previous_reporting = {}
                     time_before_next_run = phase_cfg.run_interval.min
 
-                logger.info(
+                logger.debug(
                     "Reporting (%s):",
                     datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                 )
