@@ -180,16 +180,19 @@ async def run_llm_call(
 
         # Build and render the dynamic context user message from template
         context_template = get_prompt("context.txt")
-        static_vars: dict[str, str] = {
-            "previous_summary": (
-                dumps_json(previous_reporting) if previous_reporting else "None"
-            ),
-            "last_review": dumps_json(last_review) if last_review else "None",
-        }
-        context_vars = await build_context(context_template, static_vars)
-        context_message = render_template(context_template, context_vars)
-        llm.add_message("run", context_message, role="user")
-        dbTools.add_message(run_id, "user", context_message)
+        if context_template:
+            static_vars: dict[str, str] = {
+                "previous_summary": (
+                    dumps_json(previous_reporting) if previous_reporting else "None"
+                ),
+                "last_review": dumps_json(last_review) if last_review else "None",
+            }
+            context_vars = await build_context(context_template, static_vars)
+            context_message = render_template(context_template, context_vars)
+            llm.add_message("run", context_message, role="user")
+            dbTools.add_message(run_id, "user", context_message)
+        else:
+            logger.warning("No context template found (context.txt)")
 
         loops_count = 0
         finished = False
@@ -290,17 +293,22 @@ async def run_llm_review_call(
 
         # Build and render the dynamic context user message from template
         review_context_template = get_prompt("review_context.txt")
-        static_vars: dict[str, str] = {
-            "previous_review": (
-                dumps_json(previous_review) if previous_review else "None"
-            ),
-        }
-        review_context_vars = await build_context(review_context_template, static_vars)
-        review_context_message = render_template(
-            review_context_template, review_context_vars
-        )
-        llm.add_message("review", review_context_message, role="user")
-        dbTools.add_message(review_id, "user", review_context_message)
+        if review_context_template:
+            static_vars: dict[str, str] = {
+                "previous_review": (
+                    dumps_json(previous_review) if previous_review else "None"
+                ),
+            }
+            review_context_vars = await build_context(
+                review_context_template, static_vars
+            )
+            review_context_message = render_template(
+                review_context_template, review_context_vars
+            )
+            llm.add_message("review", review_context_message, role="user")
+            dbTools.add_message(review_id, "user", review_context_message)
+        else:
+            logger.warning("No review context template found (review_context.txt)")
 
         loops_count = 0
         finished = False
