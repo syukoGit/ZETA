@@ -8,6 +8,8 @@ venv/
 
 /test_tools/exports/
 /test_tools/exports/*
+exports/
+exports/*
 
 /prompts/
 /prompts/*
