@@ -39,10 +39,11 @@ ZETA is not a simple assistant that suggests trades — it **executes them itsel
 | Module | Role |
 | ------ | ---- |
 | `script/main.py` | Main loop: initializes DB, connects to IBKR, runs trading loops plus periodic reviews |
-| `script/llm/llm_call.py` | Orchestrates both run and review calls, including tool loop and structured close tools |
+| `script/llm/llm_call.py` | Orchestrates both run and review calls, including parallel tool execution and structured close tools |
+| `script/llm/context_builder.py` | Builds the dynamic context user message by resolving `{{variable}}` placeholders concurrently from live data sources |
+| `script/llm/prompt.py` | Loads prompt files from the `prompts/` directory via `get_prompt()`; renders `{{variable}}` templates via `render_template()` |
 | `script/llm/llm_provider.py` | LLM provider abstraction (abstract `LLM` class + factory with dynamic loading) |
 | `script/llm/providers/grok_provider.py` | Grok (xAI) provider implementation with streaming, tool calling, and built-in web/X search |
-| `script/llm/prompt.py` | Loads phase-specific and review prompt files from the `prompts/` directory via `get_prompt()` |
 | `script/llm/tools/` | Auto-discovered tool registry that the LLM can call |
 | `script/ibkr/ibTools.py` | Interactive Brokers connection singleton via `ib_async` |
 | `script/db/` | Database layer (SQLAlchemy + pgvector): models, sessions, repositories |
@@ -56,11 +57,49 @@ Create these local prompt files (all are git-ignored):
 
 **Phase prompts** — file names match the `prompt_file` key configured per phase in `config.yaml`.
 
+**Shared context templates:**
+
+- `prompts/context.txt` — user message template rendered at the start of every trading run. Supports `{{variable}}` placeholders (see [Context Builder](#context-builder) below).
+- `prompts/review_context.txt` — user message template rendered at the start of every review run. Also supports `{{variable}}` placeholders.
+
 **Review prompt:**
 
 - `prompts/review_prompt.txt`
 
-At runtime, `script/llm/prompt.py` loads the appropriate file via `get_prompt()` based on the resolved phase.
+At runtime, `script/llm/prompt.py` loads the appropriate file via `get_prompt()` based on the resolved phase, and renders `{{variable}}` placeholders via `render_template()`.
+
+---
+
+## Context Builder
+
+`script/llm/context_builder.py` implements a **template-based context injection** system. At the start of each run (trading and review), a prompt template file is loaded and all `{{variable}}` placeholders are resolved concurrently before the message is sent to the LLM.
+
+### How it works
+
+1. The template is parsed for `{{variable}}` placeholders.
+2. All required fetchers are launched concurrently via `asyncio.gather`.
+3. Results are substituted into the template via `render_template()`.
+4. A single user message containing all live data is added to the conversation.
+
+Fetcher failures produce `"N/A"` for that variable and are logged as errors without aborting the run.
+
+### Available template variables
+
+| Variable | Description |
+| --- | --- |
+| `{{current_phase}}` | Active execution phase name |
+| `{{phase.min}}` / `{{phase.max}}` | Run interval bounds (seconds) for the current phase |
+| `{{current_datetime}}` | Current UTC date and time |
+| `{{market_status}}` | Open/closed status of tracked exchanges |
+| `{{next_market_close}}` | Soonest market close time (UTC) |
+| `{{cash_balance}}` | Current account cash balances |
+| `{{positions}}` | Current portfolio positions |
+| `{{open_trades}}` | Open orders |
+| `{{pnl}}` | Account P&L |
+| `{{quotes}}` | Index quotes (configured via `snapshot.indices`) |
+| `{{runs_to_review}}` | Runs pending review (used in `review_context.txt`) |
+
+Additional static variables can be passed directly by the caller and bypass fetching: `{{previous_summary}}` and `{{last_review}}` in run context; `{{previous_review}}` in review context.
 
 ---
 
@@ -102,7 +141,7 @@ ZETA exposes a set of tools that the LLM can call autonomously during each itera
 | Tool | Description |
 | --- | --- |
 | `get_date_hour_utc_and_markets` | Retrieves current UTC date/time and open/closed status of tracked US exchanges |
-| `close_run` | Closes the current run with a structured summary and next wait time |
+| `close_run` | Closes the current run with a structured summary (`trades_executed`, `run_commentary`, `time_before_next_run_s`) and proposed wait time |
 | `close_review` | Closes the review with structured strategic output |
 
 ### History Tools (review mode)
@@ -141,7 +180,7 @@ Every memory access (read/write) is **traced** and linked to the LLM message tha
 | Table | Description |
 | --- | --- |
 | `runs` | Each LLM loop execution (provider, model, status, timestamps) |
-| `messages` | Messages exchanged during a run (system, user, assistant, tool_result) |
+| `messages` | Messages exchanged during a run (system, user, assistant, tool_result); ordered by `sequence_index` |
 | `tool_calls` | Tool calls made by the LLM (name, input/output payload, status) |
 | `memory_entries` | Vector memory entries (title, content, type, tags, embedding, status) |
 | `memory_access_log` | Log of all memory accesses (traceability) |
@@ -157,9 +196,9 @@ Run trigger types include:
 
 At each run, ZETA follows a structured process:
 
-1. **Read snapshot** — Positions, cash, open orders, and index quotes (configured via `snapshot.indices`) retrieved from IBKR and injected as `SNAPSHOT_IB`
-2. **Inject context** — System prompt + snapshot + previous iteration report
-3. **Time check** — Confirm market status via `get_date_hour_utc_and_markets`
+1. **Load system prompt** — Phase-specific prompt file resolved from `config.yaml` and sent as the system message
+2. **Build and inject context** — `context.txt` template is rendered with live data (positions, cash, open orders, quotes, market status, phase, previous summary, last review) and added as a single user message
+3. **Concurrent tool execution** — Client-side tool calls within a loop iteration are dispatched concurrently (up to `_MAX_CONCURRENT_CLIENT_TOOLS = 10` in parallel)
 4. **Consult memory** — Semantic search if relevant to the current decision
 5. **Opportunity analysis** — Broad scan (earnings, macro, sector rotation, M&A, catalysts) via web/X search
 6. **Cost discipline** — Target budget of ~$10/day in API costs; if no clear edge, switch to observe mode
@@ -167,7 +206,7 @@ At each run, ZETA follows a structured process:
 8. **Learning** — Update vector memory after major events
 9. **Structured close** — End run via `close_run` with summary + `time_before_next_run_s`
 
-In parallel, a periodic review cycle analyzes recent runs and ends through `close_review`.
+In parallel, a periodic review cycle loads `review_context.txt`, resolves live data (including `runs_to_review`), and ends through `close_review`.
 
 ---
 

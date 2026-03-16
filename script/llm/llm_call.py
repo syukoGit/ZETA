@@ -5,15 +5,10 @@ from uuid import UUID
 
 from config import config
 from db.db_tools import DBTools
-from llm.prompt import get_prompt
-from llm.tools.history.get_runs_to_review import get_runs_to_review
-from llm.tools.ibkr.get_quote import get_quote
-from llm.tools.utils.get_date_hour_utc_and_markets import get_date_hour_utc_and_markets
+from llm.context_builder import build_context
+from llm.prompt import get_prompt, render_template
 from logger import GREEN, RESET, get_logger, dynamic_log, dynamic_log_end
 from llm.llm_provider import LLM, LLMFactory, ChatMode
-from llm.tools.ibkr.get_cash_balance import get_cash_balance
-from llm.tools.ibkr.get_open_trades import get_open_trades
-from llm.tools.ibkr.get_positions import get_positions
 from phase_resolver import get_current_phase
 from utils.json_utils import dumps_json
 
@@ -29,11 +24,6 @@ _dynamic_review_message = (
 
 # Limit for concurrent client-side tool executions to avoid unbounded bursts
 _MAX_CONCURRENT_CLIENT_TOOLS = 10
-
-
-# ---------------------------------------------------------------------------
-# Parallel tool-call execution helpers
-# ---------------------------------------------------------------------------
 
 
 async def _execute_client_tool_with_limit(
@@ -188,36 +178,21 @@ async def run_llm_call(
         llm.add_message("run", run_prompt, role="system")
         dbTools.add_message(run_id, "system", run_prompt)
 
-        # Provide explicit phase routing context when multiple phases share the same prompt file.
-        current_phase_message = f"CURRENT_PHASE: {get_current_phase().phase.value}"
-        llm.add_message("run", current_phase_message, role="system")
-        dbTools.add_message(run_id, "system", current_phase_message)
-
-        # Add last reporting summary to the system prompt for context, if available
-        summary_message = (
-            "PREVIOUS_SUMMARY: " + dumps_json(previous_reporting)
-            if previous_reporting
-            else "No summary provided."
-        )
-        llm.add_message("run", summary_message, role="system")
-        dbTools.add_message(run_id, "system", summary_message)
-
-        # Add IB snapshot to the system prompt for context
-        snapshot_ib = await get_snapshot_ib()
-        snapshot_message = "SNAPSHOT_IB: " + dumps_json(snapshot_ib)
-        llm.add_message("run", snapshot_message, role="system")
-        dbTools.add_message(run_id, "system", snapshot_message)
-        logger.debug("IB snapshot: %s", snapshot_ib)
-
-        # Add last review summary to the system prompt for context, if available
-        review_summary_message = (
-            "LAST_REVIEW: " + dumps_json(last_review)
-            if last_review
-            else "No last review summary provided."
-        )
-        llm.add_message("run", review_summary_message, role="system")
-        dbTools.add_message(run_id, "system", review_summary_message)
-        logger.debug("Last review summary: %s", review_summary_message)
+        # Build and render the dynamic context user message from template
+        context_template = get_prompt("context.txt")
+        if context_template:
+            static_vars: dict[str, str] = {
+                "previous_summary": (
+                    dumps_json(previous_reporting) if previous_reporting else "None"
+                ),
+                "last_review": dumps_json(last_review) if last_review else "None",
+            }
+            context_vars = await build_context(context_template, static_vars)
+            context_message = render_template(context_template, context_vars)
+            llm.add_message("run", context_message, role="user")
+            dbTools.add_message(run_id, "user", context_message)
+        else:
+            logger.warning("No context template found (context.txt)")
 
         loops_count = 0
         finished = False
@@ -316,28 +291,24 @@ async def run_llm_review_call(
         llm.add_message("review", review_prompt, role="system")
         dbTools.add_message(review_id, "system", review_prompt)
 
-        # Add last review summary to the system prompt for context, if available
-        summary_message = (
-            "PREVIOUS_REVIEW: " + dumps_json(previous_review)
-            if previous_review
-            else "No previous review summary provided."
-        )
-        llm.add_message("review", summary_message, role="system")
-        dbTools.add_message(review_id, "system", summary_message)
-
-        # Add IB snapshot to the system prompt for context
-        snapshot_ib = await get_snapshot_ib()
-        snapshot_message = "SNAPSHOT_IB: " + dumps_json(snapshot_ib)
-        llm.add_message("review", snapshot_message, role="system")
-        dbTools.add_message(review_id, "system", snapshot_message)
-        logger.debug("IB snapshot for review: %s", snapshot_ib)
-
-        # Add all runs since last review to the system prompt for context
-        runs_to_review = await get_runs_to_review({})
-        runs_message = "RUNS_TO_REVIEW: " + dumps_json(runs_to_review)
-        llm.add_message("review", runs_message, role="system")
-        dbTools.add_message(review_id, "system", runs_message)
-        logger.debug("Runs to review: %s", runs_message)
+        # Build and render the dynamic context user message from template
+        review_context_template = get_prompt("review_context.txt")
+        if review_context_template:
+            static_vars: dict[str, str] = {
+                "previous_review": (
+                    dumps_json(previous_review) if previous_review else "None"
+                ),
+            }
+            review_context_vars = await build_context(
+                review_context_template, static_vars
+            )
+            review_context_message = render_template(
+                review_context_template, review_context_vars
+            )
+            llm.add_message("review", review_context_message, role="user")
+            dbTools.add_message(review_id, "user", review_context_message)
+        else:
+            logger.warning("No review context template found (review_context.txt)")
 
         loops_count = 0
         finished = False
@@ -408,42 +379,3 @@ async def run_llm_review_call(
         llm.close_chats()
         dbTools.end_run(review_id, status="failed")
         return None
-
-
-async def get_snapshot_ib() -> Dict[str, Any]:
-    positions = await get_positions({})
-    cash_balance = await get_cash_balance({})
-    open_trades = await get_open_trades({})
-    market_status = await get_date_hour_utc_and_markets({})
-
-    quotes: Dict[str, Any] = {}
-    for idx in config().snapshot.indices:
-        try:
-            result = await get_quote(
-                {
-                    "symbol": idx.symbol,
-                    "exchange": idx.exchange,
-                    "currency": idx.currency,
-                }
-            )
-            if isinstance(result, dict):
-                quotes[idx.symbol] = result.get("last")
-            else:
-                logger.error(
-                    "get_quote for index %s returned non-dict result: %r",
-                    idx.symbol,
-                    result,
-                )
-                quotes[idx.symbol] = None
-        except Exception as e:
-            logger.error("Failed to fetch quote for index %s: %s", idx.symbol, e)
-            quotes[idx.symbol] = None
-
-    return {
-        "positions": positions["positions"],
-        "cash_balances": cash_balance["cash_balances"],
-        "open_trades": open_trades["open_trades"],
-        "date_and_hour": market_status["date_and_hour"],
-        "markets_status": market_status["markets"],
-        "quotes": quotes,
-    }
