@@ -1,11 +1,11 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable
 
-from config import config
+from config import SnapshotIndex, config
 from llm.tools.ibkr.get_quote import get_quote
 from llm.tools.ibkr.get_cash_balance import get_cash_balance
 from llm.tools.ibkr.get_open_trades import get_open_trades
@@ -22,19 +22,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DataContext:
-    date_hour_and_markets: dict[str, Any] | None = None
+    _date_hour_and_markets: asyncio.Task[dict[str, Any]] | None = field(
+        default=None, init=False
+    )
+
+    async def get_date_hour_and_markets(self) -> dict[str, Any]:
+        if self._date_hour_and_markets is None:
+            self._date_hour_and_markets = asyncio.create_task(
+                get_date_hour_utc_and_markets({})
+            )
+        return await self._date_hour_and_markets
 
 
 async def _fetch_current_datetime(data_context: DataContext) -> str:
-    if data_context.date_hour_and_markets is None:
-        data_context.date_hour_and_markets = await get_date_hour_utc_and_markets({})
-    return data_context.date_hour_and_markets["date_and_hour"]
+    data = await data_context.get_date_hour_and_markets()
+    return data["date_and_hour"]
 
 
 async def _fetch_market_status(data_context: DataContext) -> str:
-    if data_context.date_hour_and_markets is None:
-        data_context.date_hour_and_markets = await get_date_hour_utc_and_markets({})
-    return dumps_json(data_context.date_hour_and_markets["markets"])
+    data = await data_context.get_date_hour_and_markets()
+    return dumps_json(data["markets"])
 
 
 async def _fetch_next_market_close(_) -> str:
@@ -84,7 +91,7 @@ async def _fetch_quotes(_) -> str:
     # Fetch index quotes concurrently (with a bounded concurrency limit)
     semaphore = asyncio.Semaphore(5)
 
-    async def fetch_for_index(idx) -> tuple[str, Any | None]:
+    async def fetch_for_index(idx: SnapshotIndex) -> tuple[str, Any | None]:
         async with semaphore:
             try:
                 result = await get_quote(
