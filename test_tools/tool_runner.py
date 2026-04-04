@@ -12,7 +12,11 @@ from pydantic_core import PydanticUndefined
 
 from db.db_tools import DBTools
 from llm.tools.base import ToolSpec, get_tools
-from test_tools.tools_utils.check_connections import init_database, init_ibkr
+from test_tools.tools_utils.check_connections import (
+    init_database,
+    init_ibkr,
+    init_phase,
+)
 from test_tools.tools_utils.display import *
 from utils.json_utils import dumps_json
 
@@ -235,6 +239,7 @@ async def _main() -> None:
         return
 
     await init_ibkr()
+    await init_phase()
 
     try:
         # ── Load tools (run + review) ──

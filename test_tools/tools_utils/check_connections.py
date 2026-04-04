@@ -4,7 +4,7 @@ import time
 from typing import Any, Tuple
 from uuid import UUID
 
-from test_tools.tools_utils.display import fail, header, info, ok
+from test_tools.tools_utils.display import fail, header, info, message, ok, prompt
 
 
 # Database test
@@ -151,6 +151,44 @@ async def test_ibkr() -> bool:
 
     ok("IBKR test PASSED")
     return True
+
+
+async def init_phase() -> None:
+    from config import Phase
+    from phase_resolver import refresh_phase, set_phase
+
+    header("Phase Selection")
+
+    phases = list(Phase)
+    info("  0: Auto-resolve (real-time)")
+    for i, phase in enumerate(phases, start=1):
+        message(f"  {i}: {phase.value}")
+
+    while True:
+        raw = prompt("\n  Select phase [0 = auto]: ").strip()
+        if not raw:
+            raw = "0"
+
+        if not raw.isdigit():
+            fail("Please enter a number.")
+            continue
+
+        idx = int(raw)
+        if idx == 0:
+            try:
+                resolved = await refresh_phase()
+                ok(f"Auto-resolved phase: {resolved.phase.value}")
+            except Exception as exc:
+                fail(f"Phase resolution failed: {exc}")
+            return
+
+        if 1 <= idx <= len(phases):
+            chosen = phases[idx - 1]
+            resolved = set_phase(chosen)
+            ok(f"Phase forced to: {resolved.phase.value}")
+            return
+
+        fail(f"Index out of range (0..{len(phases)}).")
 
 
 async def init_ibkr() -> None:
