@@ -16,6 +16,20 @@ RESET = "\033[0m"
 _IB_200_RE = re.compile(r"\bError\s+200\b", re.IGNORECASE)
 
 
+class _DropIB162ScannerSubscritionCancelledFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "ib_async.wrapper" and record.name != "ib_async.ib":
+            return True
+
+        msg = record.getMessage()
+        is_error_162 = "Error 162" in msg
+        is_scanner_cancelled = "scanner subscription cancelled" in msg
+
+        if is_error_162 and is_scanner_cancelled:
+            return False
+        return True
+
+
 class _DropIB200UnknownContractFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.name != "ib_async.wrapper" and record.name != "ib_async.ib":
@@ -45,6 +59,7 @@ def setup_logging() -> None:
     handler = _DynamicAwareStreamHandler(sys.stdout)
     handler.setLevel(level)
     handler.addFilter(_DropIB200UnknownContractFilter())
+    handler.addFilter(_DropIB162ScannerSubscritionCancelledFilter())
     formatter = colorlog.ColoredFormatter(
         fmt="%(asctime)s %(log_color)s[%(levelname)s]%(reset)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
