@@ -1,10 +1,12 @@
 import asyncio
 import logging
 
-from ib_async import ScannerSubscription, TagValue
+from ib_async import ScannerSubscription, Stock, TagValue
 
 from config import ScanEntryConfig, ScannerConfig, config
 from ibkr.ibTools import IBTools
+from ibkr.quotes import fetch_snapshot
+from ibkr.utils import clean_price, clean_size
 from phase_resolver import get_current_phase
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,40 @@ async def _run_single_scan(scan: ScanEntryConfig, cfg: ScannerConfig) -> list[di
     return rows
 
 
+async def _enrich_with_quotes(symbols: list[str]) -> dict[str, dict]:
+    """Batch-fetch snapshot quotes (real-time with fallback) for a list of symbols."""
+    ibTools = IBTools.get_instance()
+    ib = ibTools.ib
+
+    async with ibTools.guarded():
+        contracts = [Stock(sym, "SMART", "USD") for sym in symbols]
+        await ib.qualifyContractsAsync(*contracts)
+
+        async def _fetch(contract) -> tuple[str, dict]:
+            t = await fetch_snapshot(ib, contract)
+            if not t:
+                raise ValueError(f"No market data for {contract.symbol}")
+
+            price = clean_price(t.last) or clean_price(t.close)
+            volume = clean_size(t.volume)
+            return contract.symbol, {
+                "price": price,
+                "volume": volume,
+            }
+
+        pairs = await asyncio.gather(
+            *[_fetch(c) for c in contracts], return_exceptions=True
+        )
+
+    result = {}
+    for item in pairs:
+        if isinstance(item, Exception):
+            continue
+        sym, data = item
+        result[sym] = data
+    return result
+
+
 async def run_market_scan() -> dict:
     """
     Run all phase-relevant IBKR scans in parallel, merge, score, and return top N.
@@ -91,20 +127,19 @@ async def run_market_scan() -> dict:
             merged[sym]["appeared_in"].append(scan_spec.code)
 
     # Sort: score desc, then appearances count desc as tie-break
-    # (volume not available from ScanData without extra quote requests)
     sorted_items = sorted(
         merged.items(),
         key=lambda kv: (-kv[1]["score"], -len(kv[1]["appeared_in"])),
     )[: cfg.top_n]
+
+    quotes = await _enrich_with_quotes([sym for sym, _ in sorted_items])
 
     results = [
         {
             "symbol": sym,
             "score": data["score"],
             "appeared_in": data["appeared_in"],
-            "price": None,
-            "volume": None,
-            "market_cap": None,
+            **quotes.get(sym, {"price": None, "volume": None}),
         }
         for sym, data in sorted_items
     ]
@@ -114,10 +149,3 @@ async def run_market_scan() -> dict:
         "scans_executed": executed,
         "results": results,
     }
-
-
-def _parse_float(value) -> float | None:
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
