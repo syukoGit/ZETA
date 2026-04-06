@@ -20,7 +20,7 @@ async def _run_single_scan(scan: ScanEntryConfig, cfg: ScannerConfig) -> list[di
         TagValue("priceAbove", str(cfg.min_price)),
         TagValue("priceBelow", str(cfg.max_price)),
         TagValue("avgVolumeAbove", str(cfg.min_volume)),
-        # IBKR marketCapAbove is in USD millions
+        # IBKR marketCapAbove1e6 is expressed in USD millions
         TagValue("marketCapAbove1e6", str(int(cfg.min_market_cap / 1_000_000))),
     ]
 
