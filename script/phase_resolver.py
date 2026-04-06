@@ -244,3 +244,18 @@ def get_current_phase() -> ResolvedPhase:
             "Current phase has not been initialised. Call refresh_phase() first."
         )
     return _current_phase
+
+
+def set_phase(phase: Phase) -> ResolvedPhase:
+    """
+    Force the current phase to the given value without running resolution logic.
+    Useful for test tools that need a specific phase context.
+
+    Returns:
+        The forced ResolvedPhase (also cached internally).
+    """
+    global _current_phase
+    _current_phase = ResolvedPhase(
+        phase=phase, config=config().phases.resolved_phase(phase)
+    )
+    return _current_phase

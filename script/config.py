@@ -239,6 +239,23 @@ class SnapshotConfig(BaseModel):
     indices: list[SnapshotIndex] = Field(default_factory=list)
 
 
+class ScanEntryConfig(BaseModel):
+    code: str
+    score: int = Field(default=1, ge=1)
+    phases: list[str] = Field(default_factory=list)  # [] = all phases
+
+
+class ScannerConfig(BaseModel):
+    enabled: bool = True
+    top_n: int = Field(default=15, ge=1)
+    min_price: float = Field(default=5.0, ge=0)
+    max_price: float = Field(default=200.0, ge=0)
+    min_volume: int = Field(default=300_000, ge=0)
+    min_market_cap: int = Field(default=500_000_000, ge=0)
+    location_code: str = "STK.US.MAJOR"
+    scans: list[ScanEntryConfig] = Field(default_factory=list)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -252,6 +269,7 @@ class AppConfig(BaseModel):
     phases: PhasesConfig = Field(default_factory=PhasesConfig)
     phase_config: PhaseConfig = Field(default_factory=PhaseConfig)
     ind_registry: Dict[str, str] = Field(default_factory=dict)
+    scanner: ScannerConfig = Field(default_factory=ScannerConfig)
 
 
 _lock = threading.RLock()

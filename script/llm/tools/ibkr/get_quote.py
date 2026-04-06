@@ -1,36 +1,18 @@
-import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from ib_async import IB, Ticker
 from pydantic import BaseModel, Field
 
 from ibkr.ibTools import IBTools
 from ibkr.contracts import qualify_contract
+from ibkr.quotes import _FALLBACK_DATA_TYPES, _get_data_type_name, _request_snapshot
 from ibkr.utils import clean_price, clean_size
 from llm.tools.base import register_tool
 from logger import get_logger
 
 logger = get_logger(__name__)
 
-# Fallback chain: requested type → delayed → delayed-frozen
-_FALLBACK_DATA_TYPES: Dict[int, List[int]] = {
-    1: [3, 4],  # real-time → delayed → delayed-frozen
-    2: [4, 3],  # frozen → delayed-frozen → delayed
-    3: [4],  # delayed → delayed-frozen
-    4: [3],  # delayed-frozen → delayed
-}
-
 MIN_TIMEOUT_S = 14.0
-
-
-def _get_data_type_name(mdt: int) -> str:
-    return {
-        1: "REAL-TIME",
-        2: "FROZEN",
-        3: "DELAYED",
-        4: "DELAYED-FROZEN",
-    }.get(mdt, f"UNKNOWN({mdt})")
 
 
 class GetQuoteArgs(BaseModel):
@@ -51,37 +33,6 @@ class GetQuoteArgs(BaseModel):
         description="IB market data type (1=real-time, 2=frozen, 3=delayed, 4=delayed-frozen). Default 3 (delayed) for reliability.",
     )
     regulatory_snapshot: bool = Field(False)
-
-
-async def _request_snapshot(
-    ib: IB, contract, timeout_s: float, regulatory_snapshot: bool
-) -> Optional[Ticker]:
-    """Request a single market-data snapshot with timeout. Returns Ticker or None."""
-    try:
-        tickers = await asyncio.wait_for(
-            ib.reqTickersAsync(contract, regulatorySnapshot=regulatory_snapshot),
-            timeout=timeout_s,
-        )
-        if tickers:
-            t = tickers[0]
-            # Check if we actually got meaningful data (not all NaN/-1)
-            has_data = any(
-                clean_price(getattr(t, f, None)) is not None
-                for f in ("bid", "ask", "last", "close")
-            )
-            if has_data:
-                return t
-            logger.warning(
-                "Ticker returned but no meaningful price fields for contract %s",
-                contract.symbol,
-            )
-            return None
-        return None
-    except asyncio.TimeoutError:
-        logger.warning(
-            "reqTickersAsync timed out after %.1fs for %s", timeout_s, contract.symbol
-        )
-        return None
 
 
 @register_tool(

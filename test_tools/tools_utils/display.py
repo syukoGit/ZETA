@@ -11,35 +11,35 @@ DIM = "\033[2m"
 
 
 def message(msg: str, end: str | None = "\n") -> None:
-    print(f"{msg}{RESET}", end=end)
+    print(f"{msg}{RESET}", end=end, flush=True)
 
 
 def ok(msg: str, end: str | None = "\n") -> None:
-    print(f"{GREEN}{msg}{RESET}", end=end)
+    print(f"{GREEN}{msg}{RESET}", end=end, flush=True)
 
 
 def fail(msg: str, end: str | None = "\n") -> None:
-    print(f"{RED}{msg}{RESET}", end=end)
+    print(f"{RED}{msg}{RESET}", end=end, flush=True)
 
 
 def info(msg: str, end: str | None = "\n") -> None:
-    print(f"{CYAN}{msg}{RESET}", end=end)
+    print(f"{CYAN}{msg}{RESET}", end=end, flush=True)
 
 
 def header(title: str) -> None:
-    print(f"\n{BOLD}{YELLOW}{'═' * 50}")
-    print(f"  {title}")
-    print(f"{'═' * 50}{RESET}")
+    print(f"\n{BOLD}{YELLOW}{'═' * 50}", flush=True)
+    print(f"  {title}", flush=True)
+    print(f"{'═' * 50}{RESET}", flush=True)
 
 
 def subheader(title: str, width: int = 56) -> None:
-    print(f"\n{BOLD}{CYAN}{'─' * width}")
-    print(f"  {title}")
-    print(f"{'─' * width}{RESET}")
+    print(f"\n{BOLD}{CYAN}{'─' * width}", flush=True)
+    print(f"  {title}", flush=True)
+    print(f"{'─' * width}{RESET}", flush=True)
 
 
 def separator(char: str = "·", width: int = 56, end: str | None = "\n") -> None:
-    print(f"  {DIM}{char * width}{RESET}", end=end)
+    print(f"  {DIM}{char * width}{RESET}", end=end, flush=True)
 
 
 def prompt(label: str, choices: list[str] | None = None) -> str:

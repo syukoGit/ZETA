@@ -12,6 +12,7 @@ from llm.tools.ibkr.get_open_trades import get_open_trades
 from llm.tools.ibkr.get_pnl import get_pnl
 from llm.tools.ibkr.get_positions import get_positions
 from llm.tools.utils.get_date_hour_utc_and_markets import get_date_hour_utc_and_markets
+from ibkr.scanner.core import run_market_scan
 from llm.tools.history.get_runs_to_review import get_runs_to_review
 from phase_resolver import get_current_phase
 from utils.json_utils import dumps_json
@@ -75,6 +76,11 @@ async def _fetch_runs_to_review(_) -> str:
     return dumps_json(result)
 
 
+async def _fetch_scan_results(_) -> str:
+    result = await run_market_scan()
+    return dumps_json(result)
+
+
 async def _fetch_current_phase(_) -> str:
     return get_current_phase().phase.value
 
@@ -127,6 +133,7 @@ async def _fetch_quotes(_) -> str:
 
 
 _FETCHERS: dict[str, Callable[[DataContext], Awaitable[str]]] = {
+    "scan_results": _fetch_scan_results,
     "current_phase": _fetch_current_phase,
     "phase.min": _fetch_current_phase_min,
     "phase.max": _fetch_current_phase_max,

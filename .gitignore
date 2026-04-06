@@ -1,10 +1,14 @@
 *.env
 *.tmp
 
+.claude/settings.local.json
+
 config.yaml
 
 __pycache__/
 venv/
+
+test.py
 
 /test_tools/exports/
 /test_tools/exports/*
@@ -13,3 +17,5 @@ exports/*
 
 /prompts/
 /prompts/*
+
+scanner_parameters.xml

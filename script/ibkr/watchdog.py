@@ -35,6 +35,13 @@ _CODE_HMDS_DATA_FARM_CONNECTED = 2106
 _CODE_HISTORICAL_DATA_ERROR = 162
 
 
+def _is_scanner_cancellation_162(error_string: str) -> bool:
+    """True when IB 162 is just a normal scanner cancellation."""
+    if not error_string:
+        return False
+    return "scanner subscription cancelled" in error_string.lower()
+
+
 class IBWatchdog:
     """Monitors and manages IB connection lifecycle."""
 
@@ -304,6 +311,10 @@ class IBWatchdog:
                 self._start_stabilization()
 
         elif errorCode == _CODE_HISTORICAL_DATA_ERROR:
+            if _is_scanner_cancellation_162(errorString):
+                logger.debug("Scanner subscription cancelled (162): %s", errorString)
+                return
+
             logger.warning("Historical data error (162): %s", errorString)
             for collector in self._error_code_collectors:
                 collector.append(errorCode)

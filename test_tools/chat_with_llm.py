@@ -9,7 +9,7 @@ from config import config
 from db.db_tools import DBTools
 from llm.llm_provider import LLM, LLMFactory
 from llm.tools.base import get_tools
-from test_tools.tools_utils.check_connections import init_database, init_ibkr
+from test_tools.tools_utils.check_connections import init_database, init_ibkr, init_phase
 from test_tools.tools_utils.display import *
 from utils.json_utils import dumps_json
 
@@ -95,6 +95,7 @@ async def _main() -> None:
 
     # Initialize IBKR
     await init_ibkr()
+    await init_phase()
 
     header("Configuration")
     info(f"Provider: {provider}")
