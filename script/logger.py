@@ -22,8 +22,9 @@ class _DropIB162ScannerSubscritionCancelledFilter(logging.Filter):
             return True
 
         msg = record.getMessage()
-        is_error_162 = "Error 162" in msg
-        is_scanner_cancelled = "scanner subscription cancelled" in msg
+        msg_lower = msg.lower()
+        is_error_162 = "error 162" in msg_lower
+        is_scanner_cancelled = "scanner subscription cancelled" in msg_lower
 
         if is_error_162 and is_scanner_cancelled:
             return False
