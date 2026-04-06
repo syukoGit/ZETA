@@ -70,9 +70,9 @@ async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
             )
 
         if a.order_type == "MKT":
-            order = MarketOrder(a.side, a.qty)
+            order = MarketOrder(a.side, a.qty, tif="DAY")
         else:
-            order = LimitOrder(a.side, a.qty, a.limit_price)
+            order = LimitOrder(a.side, a.qty, a.limit_price, tif="DAY")
 
         if ibTools.dry_run:
             return {
