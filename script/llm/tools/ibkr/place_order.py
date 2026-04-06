@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ibkr.contracts import qualify_contract
 from ibkr.ibTools import IBTools
+from ibkr.utils import wait_order_confirmed
 from llm.tools.base import register_tool
 from logger import get_logger
 
@@ -88,8 +89,10 @@ async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
 
         trade = ibTools.ib.placeOrder(q, order)
 
-        return {
-            "status": "SUBMITTED",
+        status, error = await wait_order_confirmed(trade)
+
+        result = {
+            "status": status,
             "orderId": trade.order.orderId,
             "symbol": trade.contract.symbol,
             "exchange": trade.contract.exchange,
@@ -99,3 +102,6 @@ async def place_order(args: Dict[str, Any]) -> Dict[str, Any]:
             "type": trade.order.orderType,
             "limitPrice": getattr(trade.order, "lmtPrice", None),
         }
+        if error:
+            result["error"] = error
+        return result

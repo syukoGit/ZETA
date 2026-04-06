@@ -6,6 +6,7 @@ from ib_async import LimitOrder, Stock, StopOrder
 from pydantic import BaseModel, Field, model_validator
 
 from ibkr.ibTools import IBTools
+from ibkr.utils import wait_order_confirmed
 from llm.tools.base import register_tool
 
 
@@ -97,8 +98,10 @@ async def place_oco_order(args: Dict[str, Any]) -> Dict[str, Any]:
         tp_trade = ibTools.ib.placeOrder(contract, tp)
         sl_trade = ibTools.ib.placeOrder(contract, sl)
 
-        return {
-            "status": "SUBMITTED",
+        status, error = await wait_order_confirmed(tp_trade)
+
+        result = {
+            "status": status,
             "symbol": contract.symbol,
             "exchange": contract.exchange,
             "currency": contract.currency,
@@ -109,3 +112,6 @@ async def place_oco_order(args: Dict[str, Any]) -> Dict[str, Any]:
             "stopLossOrderId": sl_trade.order.orderId,
             "asOf": datetime.now(timezone.utc).isoformat(),
         }
+        if error:
+            result["error"] = error
+        return result

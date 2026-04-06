@@ -6,6 +6,7 @@ from ib_async import LimitOrder, MarketOrder, Stock, StopOrder
 from pydantic import BaseModel, Field, model_validator
 
 from ibkr.ibTools import IBTools
+from ibkr.utils import wait_order_confirmed
 from llm.tools.base import register_tool
 
 
@@ -122,8 +123,10 @@ async def place_bracket_order(args: Dict[str, Any]) -> Dict[str, Any]:
         ibTools.ib.placeOrder(contract, tp)
         ibTools.ib.placeOrder(contract, sl)
 
-        return {
-            "status": "SUBMITTED",
+        status, error = await wait_order_confirmed(parent_trade)
+
+        result = {
+            "status": status,
             "symbol": a.symbol,
             "side": a.side,
             "qty": a.qty,
@@ -131,3 +134,6 @@ async def place_bracket_order(args: Dict[str, Any]) -> Dict[str, Any]:
             "parentOrderId": parent_trade.order.orderId,
             "asOf": datetime.now(timezone.utc).isoformat(),
         }
+        if error:
+            result["error"] = error
+        return result
